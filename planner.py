@@ -174,19 +174,19 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
         }
         return _enforce_canonical_plan(res)
 
-    # Unscripted Query: Rapid Cash Out / Emptied Account
-    if "emptied" in q_lower or "rapid cash" in q_lower or "large deposit" in q_lower or "within an hour" in q_lower:
+    # Rapid Cash Out / Emptied Account Query (Fix 1)
+    if any(k in q_lower for k in ["emptied", "cash out", "cash-out", "large deposit", "within an hour", "within 1 hour", "within minutes"]):
         res = {
             "planner_type": f"{reason_prefix} (Rule-Engine)",
             "intent": "pattern_detection",
             "entities": {"customer_id": None},
             "filters": {"date_range_days": None, "min_amount": 50000.0, "max_amount": None, "min_txn_count": None},
             "aml_pattern": "rapid_cash_out",
-            "reason": "Targeted rapid cash-out pattern query. EDA skipped to focus on deposit-to-outbound velocity features."
+            "reason": "Targeted rapid cash-out pattern query. EDA skipped to analyze inbound deposit to rapid outbound wire transfers."
         }
         return _enforce_canonical_plan(res)
 
-    # Unscripted Query: Compare wire vs cash
+    # Compare wire vs cash
     if "compare" in q_lower or "wire" in q_lower or "cash deposit" in q_lower:
         res = {
             "planner_type": f"{reason_prefix} (Rule-Engine)",
@@ -198,8 +198,8 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
         }
         return _enforce_canonical_plan(res)
 
-    # Query 2 / Pattern Detection
-    if "structuring" in q_lower or "pattern" in q_lower or "smurfing" in q_lower or "30 days" in q_lower:
+    # Structuring Pattern Detection Query
+    if "structuring" in q_lower or "smurfing" in q_lower or "30 days" in q_lower:
         days = 30 if "30" in q_lower or "month" in q_lower else None
         res = {
             "planner_type": f"{reason_prefix} (Rule-Engine)",
@@ -210,6 +210,7 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
             "reason": "Targeted pattern detection query. EDA skipped to focus on structuring velocity features and anomaly detection."
         }
         return _enforce_canonical_plan(res)
+
 
     # Query 1 / Default: Broad Analysis / Top riskiest customers
     res = {

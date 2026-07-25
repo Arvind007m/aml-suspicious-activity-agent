@@ -303,15 +303,16 @@ def run_agent_query(query: str, csv_path: str = "data/transactions.csv") -> Dict
     # Record execution duration
     context["execution_time_sec"] = time.time() - start_time
     
-    # Add final result summary to trace
-    top_items = context.get("top_suspicious_entities", [])
+    # Add final result summary to trace from explanations (Fix 5)
+    top_items = context.get("explanations", context.get("top_suspicious_entities", []))
     if top_items:
         top_cust = top_items[0].get("customer_id")
         top_risk = top_items[0].get("risk_level")
         top_score = top_items[0].get("risk_score")
-        top_action = top_items[0].get("escalation_action")
+        top_action = top_items[0].get("escalation_action", "File SAR (Suspicious Activity Report) & Freeze Account")
         context["reasoning_trace"].append(f"Result: top flagged Customer {top_cust} risk {top_risk} (score {top_score})")
         context["reasoning_trace"].append(f"Escalation Action: {top_action}")
+
     
     # 4. Generate supporting visual chart artifact
     chart_path = save_supporting_chart(context)
