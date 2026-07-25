@@ -121,11 +121,11 @@ def _enforce_canonical_plan(parsed: Dict[str, Any]) -> Dict[str, Any]:
 def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule Engine") -> Dict[str, Any]:
     """
     Fallback deterministic planner when Groq API key is missing or call fails.
-    Ensures system NEVER crashes on any query.
+    Ensures system NEVER crashes on any query and maps unscripted queries.
     """
     q_lower = query.lower()
 
-    # Query 3: Threshold Query (Fix 7: aml_pattern = None)
+    # Query 3: Threshold Query
     if ("10+" in q_lower or "10 transactions" in q_lower or "under $10,000" in q_lower or "under 10000" in q_lower):
         res = {
             "planner_type": f"{reason_prefix} (Rule-Engine)",
@@ -151,7 +151,31 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
         }
         return _enforce_canonical_plan(res)
 
-    # Query 2: Pattern Detection
+    # Unscripted Query: Rapid Cash Out / Emptied Account
+    if "emptied" in q_lower or "rapid cash" in q_lower or "large deposit" in q_lower or "within an hour" in q_lower:
+        res = {
+            "planner_type": f"{reason_prefix} (Rule-Engine)",
+            "intent": "pattern_detection",
+            "entities": {"customer_id": None},
+            "filters": {"date_range_days": None, "min_amount": 50000.0, "max_amount": None, "min_txn_count": None},
+            "aml_pattern": "rapid_cash_out",
+            "reason": "Targeted rapid cash-out pattern query. EDA skipped to focus on deposit-to-outbound velocity features."
+        }
+        return _enforce_canonical_plan(res)
+
+    # Unscripted Query: Compare wire vs cash
+    if "compare" in q_lower or "wire" in q_lower or "cash deposit" in q_lower:
+        res = {
+            "planner_type": f"{reason_prefix} (Rule-Engine)",
+            "intent": "pattern_detection",
+            "entities": {"customer_id": None},
+            "filters": {"date_range_days": None, "min_amount": None, "max_amount": None, "min_txn_count": None},
+            "aml_pattern": None,
+            "reason": "Comparative channel risk query. EDA skipped to analyze payment format risk distributions."
+        }
+        return _enforce_canonical_plan(res)
+
+    # Query 2 / Pattern Detection
     if "structuring" in q_lower or "pattern" in q_lower or "smurfing" in q_lower or "30 days" in q_lower:
         days = 30 if "30" in q_lower or "month" in q_lower else None
         res = {
@@ -164,7 +188,7 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
         }
         return _enforce_canonical_plan(res)
 
-    # Query 1 / Default: Broad Analysis
+    # Query 1 / Default: Broad Analysis / Top riskiest customers
     res = {
         "planner_type": f"{reason_prefix} (Rule-Engine)",
         "intent": "broad_analysis",
@@ -174,6 +198,7 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
         "reason": "Broad dataset analysis query. Running full suite including EDA, feature engineering, ML anomaly detection, and risk explanation."
     }
     return _enforce_canonical_plan(res)
+
 
 
 def create_plan(query: str) -> Dict[str, Any]:
