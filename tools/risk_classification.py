@@ -9,8 +9,29 @@ import numpy as np
 from registry import register_tool
 
 
+def get_confidence_level(row: dict) -> str:
+    """
+    Computes confidence signal per flag to prevent confidently-wrong output (Feature 3).
+    High: Multiple corroborating signals (15 near-threshold deposits OR large inbound + rapid split outflow)
+    Medium: Strong single signal (structuring >= 3 OR ML anomaly score >= 0.60)
+    Low: Weak / single event signal
+    """
+    structuring_count = row.get("structuring_count", 0)
+    rapid_cashout = row.get("rapid_cashout_flag", 0)
+    risk_score = row.get("risk_score", 0.0)
+    anomaly_score = row.get("anomaly_score", 0.0)
+    
+    if structuring_count >= 10 or rapid_cashout == 1 or risk_score >= 75.0:
+        return "High"
+    elif structuring_count >= 3 or anomaly_score >= 0.60 or risk_score >= 40.0:
+        return "Medium"
+    else:
+        return "Low"
+
+
 @register_tool("risk_classification")
 def run_risk_classification(context: Dict[str, Any]) -> Dict[str, Any]:
+
     """
     Computes overall risk scores and assigns risk levels (Low, Medium, High).
     Aligns ranking with active aml_pattern (rapid_cash_out vs structuring vs threshold_query).
@@ -97,8 +118,6 @@ def run_risk_classification(context: Dict[str, Any]) -> Dict[str, Any]:
 
         return min(round(score, 1), 100.0)
 
-    df["risk_score"] = df.apply(calculate_risk, axis=1)
-
     def get_risk_level(score):
         if score >= 70.0:
             return "High"
@@ -107,7 +126,11 @@ def run_risk_classification(context: Dict[str, Any]) -> Dict[str, Any]:
         else:
             return "Low"
 
+    df["risk_score"] = df.apply(calculate_risk, axis=1)
+
     df["risk_level"] = df["risk_score"].apply(get_risk_level)
+    df["confidence"] = df.apply(lambda r: get_confidence_level(r.to_dict()), axis=1)
+
 
     # --- 2. Filter & Rank Results Based on Active Pattern & Intent ---
     if intent == "single_entity":
@@ -128,6 +151,7 @@ def run_risk_classification(context: Dict[str, Any]) -> Dict[str, Any]:
                 "anomaly_score": 0.0,
                 "risk_score": 0.0,
                 "risk_level": "Low",
+                "confidence": "Low",
                 "explanation": f"No transactions found for customer {target_cust} in dataset.",
                 "escalation_action": "No Action Required"
             }]

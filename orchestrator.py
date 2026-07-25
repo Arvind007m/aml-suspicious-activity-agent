@@ -232,12 +232,14 @@ def print_judge_execution_summary(context: Dict[str, Any], chart_path: str):
         for idx, item in enumerate(explanations[:5], 1):
             cust_id = item.get("customer_id")
             risk = item.get("risk_level", "Low")
+            conf = item.get("confidence", "Medium")
             score = item.get("risk_score", 0.0)
             ground_truth = "LAUNDERING" if item.get("ground_truth_laundering", 0) > 0 else "CLEAN"
             expl = item.get("explanation", "N/A")
             action = item.get("escalation_action", "N/A")
             
-            print(f"  [{idx}] Customer ID: {cust_id} | Risk: {risk} (Score: {score}) | Ground Truth: {ground_truth}")
+            print(f"  [{idx}] Customer ID: {cust_id} | Risk: {risk} | Confidence: {conf} (Score: {score}) | Ground Truth: {ground_truth}")
+
             print(f"      Explanation: {expl}")
             print(f"      Action:      {action}\n")
 

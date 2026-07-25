@@ -175,7 +175,8 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
             st.markdown("### 2. Top Suspicious Entities & Evidence Explanations")
             if explanations:
                 target_cols = [
-                    "customer_id", "risk_level", "risk_score", "ground_truth_laundering", "explanation", "escalation_action"
+                    "customer_id", "risk_level", "confidence", "risk_score", 
+                    "ground_truth_laundering", "explanation", "escalation_action"
                 ]
                 df_display = pd.DataFrame(explanations)
                 valid_cols = [c for c in target_cols if c in df_display.columns]
@@ -198,6 +199,7 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
                     column_config={
                         "customer_id": st.column_config.TextColumn("Customer ID", width="small"),
                         "risk_level": st.column_config.TextColumn("Risk Level", width="small"),
+                        "confidence": st.column_config.TextColumn("Confidence", width="small"),
                         "risk_score": st.column_config.NumberColumn("Risk Score", format="%.1f", width="small"),
                         "ground_truth_laundering": st.column_config.NumberColumn("Ground Truth", width="small"),
                         "explanation": st.column_config.TextColumn("Evidence-Backed Explanation", width="large"),

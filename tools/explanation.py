@@ -48,20 +48,32 @@ def _generate_template_explanations(top_entities: List[Dict[str, Any]], aml_patt
 
         explanation_text = f"Customer {cust_id}: " + "; ".join(reasons) + "."
 
-        # Escalation action mapping
-        if risk_level == "High":
-            escalation = "File SAR (Suspicious Activity Report) & Freeze Account"
-        elif risk_level == "Medium":
-            escalation = "Enhanced Due Diligence (EDD) Review"
-        else:
+        # Confidence Signal per Flag (Feature 3): Prevent confidently-wrong output
+        confidence = item.get("confidence")
+        if not confidence:
+            if struct_cnt >= 10 or rapid_flag == 1 or item.get("risk_score", 0.0) >= 75.0:
+                confidence = "High"
+            elif struct_cnt >= 3 or anomaly_score >= 0.60 or item.get("risk_score", 0.0) >= 40.0:
+                confidence = "Medium"
+            else:
+                confidence = "Low"
+
+        # Escalation action mapping MUST respect confidence signal (never recommend SAR on Low confidence!)
+        if confidence == "Low" or risk_level == "Low":
             escalation = "Routine Monitoring"
+        elif risk_level == "High":
+            escalation = "File SAR (Suspicious Activity Report) & Freeze Account"
+        else:
+            escalation = "Enhanced Due Diligence (EDD) Review"
 
         explained_item = dict(item)
+        explained_item["confidence"] = confidence
         explained_item["explanation"] = explanation_text
         explained_item["escalation_action"] = escalation
         explained.append(explained_item)
 
     return explained
+
 
 
 @register_tool("explanation")
