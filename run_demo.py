@@ -51,7 +51,8 @@ def run_full_hackathon_demo():
         print("*"*75)
         
         run_agent_query(q_text)
-        time.sleep(1.5)
+        # Fix 8: Add 2-second rate-limit sleep between queries
+        time.sleep(2.0)
 
     print("\n" + "#"*75)
     print("      DEMO COMPLETE - ALL 4 QUERIES EXECUTED WITH DYNAMIC BRANCHING    ")

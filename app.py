@@ -62,13 +62,16 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
             st.subheader("📊 Supporting Visual Chart")
             st.image(latest_chart, use_container_width=True)
 
-        # --- Top Flagged Entities ---
+        # --- Top Flagged Entities (Fix 6: Column Existence Guard) ---
         st.subheader("🚨 Top Flagged Suspicious Entities")
         explanations = context.get("explanations", [])
         if explanations:
-            df_display = pd.DataFrame(explanations)[[
+            target_cols = [
                 "customer_id", "risk_level", "risk_score", "ground_truth_laundering", "explanation", "escalation_action"
-            ]]
+            ]
+            df_display = pd.DataFrame(explanations)
+            valid_cols = [c for c in target_cols if c in df_display.columns]
+            df_display = df_display[valid_cols]
             st.dataframe(df_display, use_container_width=True)
         else:
             st.info("No suspicious entities flagged for this query.")

@@ -28,7 +28,8 @@ def run_risk_classification(context: Dict[str, Any]) -> Dict[str, Any]:
         df["anomaly_score"] = 0.0  # NO ML scoring used
     else:
         # Generate basic dataframe if missing
-        df_raw = context["df"]
+        df_raw = context["df"].copy()
+        df_raw["customer_id"] = df_raw["customer_id"].astype(str)
         records = []
         for cust_id, group in df_raw.groupby("customer_id"):
             struct_cnt = len(group[(group["amount"] >= 9000.0) & (group["amount"] < 10000.0)])
@@ -45,6 +46,8 @@ def run_risk_classification(context: Dict[str, Any]) -> Dict[str, Any]:
                 "anomaly_score": 0.0
             })
         df = pd.DataFrame(records)
+
+    df["customer_id"] = df["customer_id"].astype(str)
 
     # --- 1. Compute Composite Risk Score (0 - 100) ---
     def calculate_risk(row):
@@ -79,12 +82,16 @@ def run_risk_classification(context: Dict[str, Any]) -> Dict[str, Any]:
 
     df["risk_level"] = df["risk_score"].apply(get_risk_level)
 
-    # --- 2. Filter Results Based on User Query Intent ---
+    # --- 2. Filter Results Based on User Query Intent (Fix 1: String Casting) ---
     if intent == "single_entity":
-        target_cust = entities.get("customer_id") or "4521"
-        df_filtered = df[df["customer_id"].astype(str) == str(target_cust)].copy()
+        target_cust = str(entities.get("customer_id") or "4521").strip()
+        df_filtered = df[df["customer_id"].astype(str) == target_cust].copy()
         if len(df_filtered) == 0:
-            # Fallback to top high risk item if entity missing
+            # Fallback to matching target_cust without non-digit chars if needed
+            cleaned_target = ''.join(filter(str.isdigit, target_cust))
+            if cleaned_target:
+                df_filtered = df[df["customer_id"].astype(str) == cleaned_target].copy()
+        if len(df_filtered) == 0:
             df_filtered = df.sort_values("risk_score", ascending=False).head(1)
 
     elif intent == "threshold_query":

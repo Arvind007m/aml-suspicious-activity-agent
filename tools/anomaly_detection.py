@@ -1,5 +1,6 @@
 """
 Anomaly Detection Tool: Machine Learning (Isolation Forest) Anomaly Scoring.
+Strictly prevents label leakage by excluding ground-truth 'is_laundering' and string ID columns.
 """
 
 from typing import Dict, Any
@@ -14,10 +15,12 @@ from registry import register_tool
 def run_anomaly_detection(context: Dict[str, Any]) -> Dict[str, Any]:
     """
     Fits IsolationForest ML model on customer feature vector to compute anomaly scores.
+    Strictly trains ONLY on numeric engineered behavioral features to prevent label leakage.
     """
     # If df_features is missing (e.g. single entity query skipping feature_engineering), compute basic features first
     if "df_features" not in context:
-        df: pd.DataFrame = context["df"]
+        df: pd.DataFrame = context["df"].copy()
+        df["customer_id"] = df["customer_id"].astype(str)
         records = []
         for cust_id, group in df.groupby("customer_id"):
             structuring_count = len(group[(group["amount"] >= 9000.0) & (group["amount"] < 10000.0)])
@@ -36,6 +39,10 @@ def run_anomaly_detection(context: Dict[str, Any]) -> Dict[str, Any]:
     else:
         df_features = context["df_features"].copy()
 
+    df_features["customer_id"] = df_features["customer_id"].astype(str)
+
+    # ML Feature Matrix (Fix 3): ONLY numeric behavioral features feed the IsolationForest model.
+    # EXPLICITLY EXCLUDED: is_laundering (ground truth label), ground_truth_laundering, customer_id, transaction_id, accounts, currency, timestamps.
     feature_cols = [
         "structuring_count",
         "velocity_24h",
@@ -43,6 +50,8 @@ def run_anomaly_detection(context: Dict[str, Any]) -> Dict[str, Any]:
         "max_txn_amount",
         "rapid_cashout_flag"
     ]
+    
+    print(f"  [ML Model Features Trained On]: {feature_cols} (is_laundering EXCLUDED)")
     
     X = df_features[feature_cols].fillna(0)
     
