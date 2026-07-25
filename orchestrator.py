@@ -249,14 +249,32 @@ def print_judge_execution_summary(context: Dict[str, Any], chart_path: str):
     print("="*70 + "\n")
 
 
+from guardrails import validate_query
+
+
 def run_agent_query(query: str, csv_path: str = "data/transactions.csv") -> Dict[str, Any]:
     """
     Main entry point for running a query through the AML agent pipeline.
     Wrapped in top-level try/except for 100% crash resilience (Fix 1).
+    Applies Input Guardrails (Feature 2) before planning.
     """
     start_time = time.time()
     
     try:
+        # Feature 2: Input Guardrail Check (validation against empty, long, or malicious inputs)
+        is_valid, err_msg, guard_plan = validate_query(query)
+        if not is_valid:
+            print(f"\n[!] Input Guardrail Alert: {err_msg}")
+            return {
+                "query": query,
+                "df": pd.DataFrame(),
+                "plan_meta": guard_plan,
+                "executed_tools": [],
+                "explanations": [],
+                "reasoning_trace": guard_plan.get("reasoning_trace", []),
+                "execution_time_sec": time.time() - start_time
+            }
+
         if not os.path.exists(csv_path):
             print(f"[!] Dataset not found at {csv_path}. Generating synthetic dataset...")
             save_dataset(csv_path)
@@ -266,6 +284,10 @@ def run_agent_query(query: str, csv_path: str = "data/transactions.csv") -> Dict
         
         # 1. Planner parses query into structured JSON plan
         plan_meta = create_plan(query)
+        
+        # COMPOUNDING ERROR GUARDRAIL: Planner enforces a maximum tool execution cap (<=5 tools)
+        # and canonical plan mapping per intent to prevent compounding errors across multi-step chains.
+
         
         # Feature 3: Check for human-in-the-loop clarification
         if plan_meta.get("intent") == "needs_clarification":
