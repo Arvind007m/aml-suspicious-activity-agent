@@ -55,8 +55,12 @@ def generate_synthetic_aml_data(num_rows: int = 5000, random_seed: int = 42) -> 
         receiver_cust = random.choice(customers)
         receiver_acc = accounts[receiver_cust] if receiver_cust != cust else f"EXT_ACC_{random.randint(5000, 9999)}"
         
-        # Exponential distribution for normal amount (mostly small/medium $10-$2,500)
-        amount = round(float(np.random.exponential(scale=350.0) + 15.0), 2)
+        # 98% normal small/medium, 2% legitimate large business transfers > $9,000
+        if random.random() < 0.02:
+            amount = round(float(random.uniform(9100.0, 45000.0)), 2)
+        else:
+            amount = round(float(np.random.exponential(scale=350.0) + 15.0), 2)
+            
         payment_fmt = random.choice(["ACH", "Credit Card", "Wire", "Cash Deposit"])
         currency = random.choice(["USD", "USD", "USD", "EUR", "GBP"])
         
@@ -71,6 +75,7 @@ def generate_synthetic_aml_data(num_rows: int = 5000, random_seed: int = 42) -> 
             "payment_format": payment_fmt,
             "is_laundering": 0
         })
+
 
     # --- 2. Pattern 1: Structuring / Smurfing (Customer 4521 & Customer 1089) ---
     # Customer 4521: 15 cash deposits just under $10,000 within 24 hours

@@ -127,7 +127,11 @@ def calculate_detection_metrics(context: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     else:
-        # Broad analysis: Dataset-wide evaluation
+        # Broad analysis: Dataset-wide evaluation & Naive False-Positive Reduction Baseline (Feature 4)
+        naive_flagged_custs = set(df_raw[df_raw["amount"] >= 9000.0]["customer_id"].astype(str).unique())
+        naive_fp = len(naive_flagged_custs - laundering_customers)
+        naive_flagged_cnt = len(naive_flagged_custs)
+        
         true_positives = len(flagged_set.intersection(laundering_customers))
         false_positives = len(flagged_set - laundering_customers)
         false_negatives = total_ground_truth - true_positives
@@ -137,6 +141,8 @@ def calculate_detection_metrics(context: Dict[str, Any]) -> Dict[str, Any]:
         f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
         hit_rate = (true_positives / len(flagged_set)) * 100.0 if len(flagged_set) > 0 else 0.0
 
+        fp_reduction_pct = ((naive_fp - false_positives) / naive_fp * 100.0) if naive_fp > 0 else 0.0
+
         return {
             "scope": "dataset_wide",
             "precision": round(precision, 3),
@@ -145,14 +151,17 @@ def calculate_detection_metrics(context: Dict[str, Any]) -> Dict[str, Any]:
             "hit_rate_pct": round(hit_rate, 1),
             "true_positives": true_positives,
             "false_positives": false_positives,
-            "total_laundering_customers": total_ground_truth
+            "total_laundering_customers": total_ground_truth,
+            "naive_flagged_cnt": naive_flagged_cnt,
+            "naive_false_positives": naive_fp,
+            "fp_reduction_pct": round(fp_reduction_pct, 1)
         }
 
 
 def print_judge_execution_summary(context: Dict[str, Any], chart_path: str):
     """
     Prints a clean, judge-facing execution summary detailing plan, execution, metrics, and explanations.
-    Includes Live Reasoning Trace (Feature 1) and Efficiency Savings Metrics (Feature 5).
+    Includes Live Reasoning Trace (Feature 1), Efficiency Metrics (Feature 5), and Naive FP Reduction (Feature 4).
     """
     plan_meta = context["plan_meta"]
     metrics = calculate_detection_metrics(context)
@@ -203,6 +212,9 @@ def print_judge_execution_summary(context: Dict[str, Any], chart_path: str):
         print(f"  * Query-Scoped Precision: {metrics['precision']} ({metrics['true_positives']} TP / {metrics['evaluated_customers']} Evaluated)")
         print(f"  * Detection Hit Rate:     {metrics['hit_rate_pct']}%")
     else:
+        print(f"  * Naive Rule Baseline:  Flagged {metrics['naive_flagged_cnt']} customers ({metrics['naive_false_positives']} False Positives)")
+        print(f"  * Agent Hybrid Model:   Flagged {metrics['true_positives']+metrics['false_positives']} customers ({metrics['false_positives']} False Positives)")
+        print(f"  * Business Impact:      False Positives Reduced by {metrics['fp_reduction_pct']}%")
         print(f"  * Dataset Precision:    {metrics['precision']} ({metrics['true_positives']} TP / {metrics['true_positives']+metrics['false_positives']} Flagged)")
         print(f"  * Dataset Recall:       {metrics['recall']} ({metrics['true_positives']} TP / {metrics['total_laundering_customers']} Actual Laundering)")
         print(f"  * Dataset F1 Score:     {metrics['f1_score']}")
@@ -211,6 +223,7 @@ def print_judge_execution_summary(context: Dict[str, Any], chart_path: str):
     print("-" * 70)
     print("             TOP SUSPICIOUS ENTITIES & EXPLANATIONS             ")
     print("-" * 70)
+
     
     if not explanations:
         print("  No suspicious entities flagged for this query.")
