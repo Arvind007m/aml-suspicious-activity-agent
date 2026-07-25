@@ -114,9 +114,30 @@ def run_risk_classification(context: Dict[str, Any]) -> Dict[str, Any]:
         target_cust = str(entities.get("customer_id") or "4521").strip()
         df_filtered = df[df["customer_id"].astype(str) == target_cust].copy()
         if len(df_filtered) == 0:
-            df_filtered = df.sort_values("risk_score", ascending=False).head(1)
+            # Non-existent customer guard (Fix 1)
+            records = [{
+                "customer_id": target_cust,
+                "txn_count_total": 0,
+                "total_amount_usd": 0.0,
+                "max_txn_amount": 0.0,
+                "avg_txn_amount": 0.0,
+                "structuring_count": 0,
+                "velocity_24h": 0,
+                "rapid_cashout_flag": 0,
+                "ground_truth_laundering": 0,
+                "anomaly_score": 0.0,
+                "risk_score": 0.0,
+                "risk_level": "Low",
+                "explanation": f"No transactions found for customer {target_cust} in dataset.",
+                "escalation_action": "No Action Required"
+            }]
+            context["df_risk"] = df
+            context["top_suspicious_entities"] = records
+            context["explanations"] = records
+            return context
 
     elif intent == "threshold_query":
+
         # Query 3: Customers with 10+ txns under $10,000 (Pure threshold filtering)
         df_filtered = df[
             (df["structuring_count"] >= 10) | 

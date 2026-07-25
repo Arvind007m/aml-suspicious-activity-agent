@@ -13,7 +13,7 @@ import pandas as pd
 import numpy as np
 
 
-def generate_synthetic_aml_data(num_rows: int = 5000, random_seed: int = 42) -> pd.DataFrame:
+def generate_synthetic_aml_data(num_rows: int = 5000, seed: int = 42) -> pd.DataFrame:
     """
     Generates synthetic transaction dataset for AML detection.
     
@@ -28,8 +28,8 @@ def generate_synthetic_aml_data(num_rows: int = 5000, random_seed: int = 42) -> 
     - payment_format (str: Wire, ACH, Cash Deposit, Credit Card)
     - is_laundering (int: 0 or 1)
     """
-    random.seed(random_seed)
-    np.random.seed(random_seed)
+    random.seed(seed)
+    np.random.seed(seed)
     
     start_date = datetime.now() - timedelta(days=90)
     

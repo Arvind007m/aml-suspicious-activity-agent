@@ -22,6 +22,7 @@ def run_feature_engineering(context: Dict[str, Any]) -> Dict[str, Any]:
     filters = plan_meta.get("filters", {})
     aml_pattern = plan_meta.get("aml_pattern")
     
+    df_orig = df.copy()
     orig_rows = len(df)
     
     # 1. Apply date range filter if specified in query plan
@@ -30,9 +31,15 @@ def run_feature_engineering(context: Dict[str, Any]) -> Dict[str, Any]:
     date_days = filters.get("date_range_days")
     if date_days:
         cutoff = max_dt - timedelta(days=int(date_days))
-        df = df[df["dt"] >= cutoff].copy()
+        df_filtered = df[df["dt"] >= cutoff].copy()
+        if len(df_filtered) == 0:
+            print(f"  [!] No transactions found in the last {date_days} days window. Falling back to full dataset for analysis.")
+            df = df_orig.copy()
+        else:
+            df = df_filtered
 
     # 2. Apply amount filters if specified in query plan
+
     min_amt = filters.get("min_amount")
     if min_amt is not None and aml_pattern != "rapid_cash_out":
         df = df[df["amount"] >= float(min_amt)]

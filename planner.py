@@ -129,7 +129,25 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
     """
     q_lower = query.lower()
 
-    # Vague Query -> Human-in-the-Loop Clarification (Feature 3)
+    # 1. Empty / Whitespace Query Guard (Fix 1)
+    if not q_lower.strip():
+        return {
+            "planner_type": f"{reason_prefix} (Rule-Engine)",
+            "intent": "needs_clarification",
+            "entities": {"customer_id": None},
+            "filters": {"date_range_days": None, "min_amount": None, "max_amount": None, "min_txn_count": None},
+            "aml_pattern": None,
+            "plan": [],
+            "skipped": ["eda", "feature_engineering", "anomaly_detection", "risk_classification", "explanation"],
+            "reason": "Empty query received. Please enter a search query or select a sample query above.",
+            "clarifying_question": "Please enter a valid search query (e.g. 'Analyse this dataset' or 'Is customer 4521 suspicious?').",
+            "reasoning_trace": [
+                "Parsed query -> EMPTY QUERY",
+                "Decision: HALT execution & prompt user for valid query input"
+            ]
+        }
+
+    # 2. Vague Query / Help -> Human-in-the-Loop Clarification (Feature 3)
     if q_lower.strip() in ["check the data", "is this bad?", "what's going on?", "check data", "is anything wrong?", "help"]:
         return {
             "planner_type": f"{reason_prefix} (Rule-Engine)",
@@ -148,7 +166,13 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
             ]
         }
 
-    # Query 3: Threshold Query
+    # 3. Non-Existent Customer Lookup Guard
+    import re
+    cust_match = re.search(r'\b(?:customer|cust|id)\s*#?\s*(\d+)\b', q_lower)
+    target_cust = cust_match.group(1) if cust_match else None
+
+    # 4. Threshold Query
+
     if ("10+" in q_lower or "10 transactions" in q_lower or "under $10,000" in q_lower or "under 10000" in q_lower):
         res = {
             "planner_type": f"{reason_prefix} (Rule-Engine)",
@@ -254,8 +278,8 @@ def create_plan(query: str) -> Dict[str, Any]:
 
     
     if not groq_api_key or groq_api_key == "your_groq_api_key_here":
-        print("[!] GROQ_API_KEY not found in environment. Using Fallback Rule-Engine.")
-        return _rule_based_fallback_planner(query, reason_prefix="Offline Fallback")
+        print("[!] GROQ_API_KEY not set or default placeholder. Engaging Fallback Rule-Engine.")
+        return _rule_based_fallback_planner(query, reason_prefix="Rule-Engine (LLM Unavailable)")
 
     try:
         from groq import Groq
@@ -265,24 +289,25 @@ def create_plan(query: str) -> Dict[str, Any]:
             model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"User Query: \"{query}\""}
+                {"role": "user", "content": f"User Query: '{query}'"}
             ],
-            temperature=0.1,
-            response_format={"type": "json_object"}
+            temperature=0.0,
+            response_format={"type": "json_object"},
+            timeout=15.0  # 15s timeout prevents API hangs (Fix 2)
         )
         
-        raw_text = response.choices[0].message.content.strip()
-        parsed = json.loads(raw_text)
-        
+        raw_content = response.choices[0].message.content.strip()
+        parsed = json.loads(raw_content)
         parsed["planner_type"] = "Groq LLM (llama-3.3-70b-versatile)"
-        
+
         # Enforce canonical plan & skipped tool arrays per intent (Fix 5)
         parsed = _enforce_canonical_plan(parsed)
         return parsed
 
     except Exception as e:
-        print(f"[!] Groq API call failed or parse error: {e}. Falling back to Rule Engine.")
-        return _rule_based_fallback_planner(query, reason_prefix="Groq Error Fallback")
+        print(f"[!] Groq API unavailable or timed out ({e}). Engaging Rule-Based Fallback.")
+        return _rule_based_fallback_planner(query, reason_prefix="Rule-Engine (LLM Unavailable)")
+
 
 
 if __name__ == "__main__":

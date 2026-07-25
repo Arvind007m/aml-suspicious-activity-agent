@@ -132,9 +132,11 @@ Valid escalation actions: "File SAR (Suspicious Activity Report) & Freeze Accoun
                 {"role": "system", "content": system_msg},
                 {"role": "user", "content": f"Flagged Customers Feature Data: {json.dumps(prompt_entities)}"}
             ],
-            temperature=0.1,
-            response_format={"type": "json_object"}
+            temperature=0.0,
+            response_format={"type": "json_object"},
+            timeout=15.0
         )
+
         
         raw_res = response.choices[0].message.content.strip()
         parsed = json.loads(raw_res)
