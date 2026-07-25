@@ -64,8 +64,18 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
         context = run_agent_query(custom_query)
         plan_meta = context["plan_meta"]
         
+        # --- LLM Unavailable UI Banner ---
+        if plan_meta.get("intent") == "llm_unavailable":
+            st.error("🛑 **LLM Unavailable**")
+            st.info(f"**Status**: {plan_meta.get('reason')}")
+            st.caption("The agent halted execution because the LLM API is unavailable (rate limit reached or missing API key). Rule engine fallback disabled.")
+            
+            st.subheader("🧠 Agent Reasoning Trace")
+            for idx, step in enumerate(plan_meta.get("reasoning_trace", []), 1):
+                st.write(f"**Step {idx:02d}**: {step}")
+
         # --- Feature 3: Human-in-the-Loop Clarification UI ---
-        if plan_meta.get("intent") == "needs_clarification":
+        elif plan_meta.get("intent") == "needs_clarification":
             st.warning("❓ **Human-in-the-Loop Clarification Required**")
             st.info(f"**Clarifying Question**: {plan_meta.get('clarifying_question')}")
             st.caption("The agent halted tool execution to save overhead because the query was too ambiguous.")
@@ -73,6 +83,7 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
             st.subheader("🧠 Agent Reasoning Trace")
             for idx, step in enumerate(plan_meta.get("reasoning_trace", []), 1):
                 st.write(f"**Step {idx:02d}**: {step}")
+
 
         else:
             st.success("Execution Complete!")
@@ -98,16 +109,17 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
             m_col3.metric("Flagged Risk", f"{high_risk_cnt} High Risk", delta=f"{total_flagged} total flagged")
 
             if intent == "broad_analysis":
-                # PROMINENT FP REDUCTION metric card for broad analysis
-                fp_red = metrics.get("fp_reduction_pct", 100.0)
-                naive_fp = metrics.get("naive_false_positives", 76)
-                agent_fp = metrics.get("false_positives", 0)
-                m_col4.metric("False Positives Reduced", f"{fp_red:.1f}%", delta=f"{agent_fp} agent vs {naive_fp} naive FP", delta_color="normal")
+                # PROMINENT FP REDUCTION metric card for broad analysis (Fix H1: compute real metrics, no hardcoded defaults)
+                fp_red_str = f"{metrics['fp_reduction_pct']:.1f}%" if "fp_reduction_pct" in metrics else "N/A"
+                naive_fp = metrics.get("naive_false_positives", "N/A")
+                agent_fp = metrics.get("false_positives", "N/A")
+                m_col4.metric("False Positives Reduced", fp_red_str, delta=f"{agent_fp} agent vs {naive_fp} naive FP", delta_color="normal")
                 m_col5.metric("Tool Savings", "Full Analysis (5/5 tools)", delta=f"Execution: {exec_time:.2f}s")
             else:
                 tools_run_cnt = len(exec_tools)
                 saved_overhead = int(((5 - tools_run_cnt) / 5) * 100)
                 m_col4.metric("Tool Savings", f"{saved_overhead}% Saved", delta=f"{tools_run_cnt}/5 tools run")
+
                 m_col5.metric("Execution Time", f"{exec_time:.2f}s")
 
             # --- 2. Clear Agent Decision Summary Panel (Fix 2) ---
@@ -169,11 +181,20 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
             st.markdown("### 1. Detection Performance & Baseline Metrics")
             if metrics["scope"] == "broad_analysis" or metrics["scope"] == "dataset_wide":
                 p_col1, p_col2, p_col3, p_col4, p_col5 = st.columns(5)
-                p_col1.metric("Dataset Precision", f"{metrics.get('precision', 1.0):.3f}")
-                p_col2.metric("Dataset Recall", f"{metrics.get('recall', 0.75):.3f}")
-                p_col3.metric("F1 Score", f"{metrics.get('f1_score', 0.857):.3f}")
-                p_col4.metric("Naive FP Baseline", f"{metrics.get('naive_false_positives', 76)} False Positives", delta=f"{metrics.get('naive_flagged_cnt', 80)} total flagged")
-                p_col5.metric("Agent Impact", f"{metrics.get('fp_reduction_pct', 100.0):.1f}% FP Reduction", delta=f"{metrics.get('false_positives', 0)} agent FP")
+                prec_str = f"{metrics['precision']:.3f}" if "precision" in metrics else "N/A"
+                rec_str = f"{metrics['recall']:.3f}" if "recall" in metrics else "N/A"
+                f1_str = f"{metrics['f1_score']:.3f}" if "f1_score" in metrics else "N/A"
+                n_fp = metrics.get("naive_false_positives", "N/A")
+                n_flagged = metrics.get("naive_flagged_cnt", "N/A")
+                fp_red_pct = f"{metrics['fp_reduction_pct']:.1f}%" if "fp_reduction_pct" in metrics else "N/A"
+                a_fp = metrics.get("false_positives", "N/A")
+
+                p_col1.metric("Dataset Precision", prec_str)
+                p_col2.metric("Dataset Recall", rec_str)
+                p_col3.metric("F1 Score", f1_str)
+                p_col4.metric("Naive FP Baseline", f"{n_fp} False Positives", delta=f"{n_flagged} total flagged")
+                p_col5.metric("Agent Impact", f"{fp_red_pct} FP Reduction", delta=f"{a_fp} agent FP")
+
             elif metrics["scope"] == "single_entity":
                 st.info(f"🎯 **Single Entity Lookup**: Customer **{metrics.get('target_customer')}** evaluated | Ground Truth: **{metrics.get('target_laundering_ground_truth')}** | Assigned Risk: **{metrics.get('target_risk_level')}**")
             else:

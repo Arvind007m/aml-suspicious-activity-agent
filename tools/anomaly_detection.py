@@ -9,6 +9,8 @@ import numpy as np
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 from registry import register_tool
+from tools.feature_engineering import compute_customer_features
+from config import ISO_CONTAMINATION, RANDOM_SEED
 
 
 @register_tool("anomaly_detection")
@@ -17,25 +19,10 @@ def run_anomaly_detection(context: Dict[str, Any]) -> Dict[str, Any]:
     Fits IsolationForest ML model on customer feature vector to compute anomaly scores.
     Strictly trains ONLY on numeric engineered behavioral features to prevent label leakage.
     """
-    # If df_features is missing (e.g. single entity query skipping feature_engineering), compute basic features first
-    if "df_features" not in context:
-        df: pd.DataFrame = context["df"].copy()
-        df["customer_id"] = df["customer_id"].astype(str)
-        records = []
-        for cust_id, group in df.groupby("customer_id"):
-            structuring_count = len(group[(group["amount"] >= 9000.0) & (group["amount"] < 10000.0)])
-            records.append({
-                "customer_id": str(cust_id),
-                "txn_count_total": len(group),
-                "total_amount_usd": round(float(group["amount"].sum()), 2),
-                "max_txn_amount": round(float(group["amount"].max()), 2),
-                "avg_txn_amount": round(float(group["amount"].mean()), 2),
-                "structuring_count": structuring_count,
-                "velocity_24h": min(len(group), 15),
-                "rapid_cashout_flag": 1 if group["amount"].max() > 100000.0 else 0,
-                "ground_truth_laundering": int(group["is_laundering"].sum())
-            })
-        df_features = pd.DataFrame(records)
+    # Use unified compute_customer_features if df_features was skipped (Fix C3)
+    if "df_features" not in context or context["df_features"].empty:
+        plan_meta = context.get("plan_meta", {})
+        df_features = compute_customer_features(context["df"], plan_meta)
     else:
         df_features = context["df_features"].copy()
 
@@ -58,9 +45,10 @@ def run_anomaly_detection(context: Dict[str, Any]) -> Dict[str, Any]:
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
     
-    # Train Isolation Forest model
-    model = IsolationForest(contamination=0.03, random_state=42)
+    # Train Isolation Forest model using centralized parameters (Fix M1)
+    model = IsolationForest(contamination=ISO_CONTAMINATION, random_state=RANDOM_SEED)
     model.fit(X_scaled)
+
     
     # Calculate decision function (lower values = more anomalous)
     raw_scores = model.decision_function(X_scaled)

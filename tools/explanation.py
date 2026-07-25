@@ -33,16 +33,29 @@ def _generate_template_explanations(top_entities: List[Dict[str, Any]], aml_patt
         txn_cnt = item.get("txn_count_total", 0)
         total_usd = item.get("total_amount_usd", 0.0)
         max_usd = item.get("max_txn_amount", 0.0)
+        struct_min = item.get("structuring_min_amt", 0.0)
+        struct_max = item.get("structuring_max_amt", 0.0)
+        drained_pct = item.get("cashout_drained_pct", 0.0)
+        outbound_cnt = item.get("outbound_txn_count", 0)
+        window_mins = item.get("cashout_window_minutes", 0)
         inbound_usd = item.get("inbound_deposit_usd", max_usd)
+
         outbound_usd = item.get("outbound_drained_usd", round(total_usd - inbound_usd, 2))
-        drained_pct = item.get("cashout_drained_pct", 96.7)
-        outbound_cnt = item.get("outbound_txn_count", 12)
 
         reasons = []
+
         if aml_pattern == "rapid_cash_out" or cashout == 1:
-            reasons.append(f"Received ${inbound_usd:,.2f} inbound wire deposit then transferred out {drained_pct:.1f}% (${outbound_usd:,.2f}) via {outbound_cnt} rapid outbound wire splits within 45 minutes — consistent with rapid cash-out")
+            window_str = f"within {window_mins} minutes" if window_mins > 0 else "within short timeframe"
+            cnt_str = f"via {outbound_cnt} rapid outbound wire splits" if outbound_cnt > 0 else "via rapid outbound wire splits"
+            reasons.append(f"Received ${inbound_usd:,.2f} inbound wire deposit then transferred out {drained_pct:.1f}% (${outbound_usd:,.2f}) {cnt_str} {window_str} — consistent with rapid cash-out")
         elif aml_pattern == "structuring" or struct_cnt >= 3:
-            reasons.append(f"{struct_cnt} cash deposits of $9,100–$9,950 within 24h (total volume ${total_usd:,.2f}), all just below the $10,000 reporting threshold — consistent with structuring (Smurfing)")
+            if struct_min > 0 and struct_max > 0 and struct_min != struct_max:
+                range_str = f"${struct_min:,.2f}–${struct_max:,.2f}"
+            elif struct_max > 0:
+                range_str = f"around ${struct_max:,.2f}"
+            else:
+                range_str = "just below $10,000"
+            reasons.append(f"{struct_cnt} cash deposits of {range_str} within 24h (total volume ${total_usd:,.2f}), all just below the $10,000 reporting threshold — consistent with structuring (Smurfing)")
         else:
             if velocity >= 10:
                 reasons.append(f"Abnormal transaction velocity ({velocity} transactions within rolling 24-hour window)")
@@ -56,12 +69,13 @@ def _generate_template_explanations(top_entities: List[Dict[str, Any]], aml_patt
         # Confidence Signal per Flag (Feature 3): Prevent confidently-wrong output
         confidence = item.get("confidence")
         if not confidence:
-            if struct_cnt >= 10 or rapid_flag == 1 or item.get("risk_score", 0.0) >= 75.0:
+            if struct_cnt >= 10 or cashout == 1 or item.get("risk_score", 0.0) >= 75.0:
                 confidence = "High"
             elif struct_cnt >= 3 or anomaly_score >= 0.60 or item.get("risk_score", 0.0) >= 40.0:
                 confidence = "Medium"
             else:
                 confidence = "Low"
+
 
         # Escalation action mapping MUST respect confidence signal (never recommend SAR on Low confidence!)
         if confidence == "Low" or risk_level == "Low":

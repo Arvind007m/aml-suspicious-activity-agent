@@ -96,8 +96,9 @@ def calculate_detection_metrics(context: Dict[str, Any]) -> Dict[str, Any]:
     flagged_set = set(flagged_high_med)
 
     if intent == "single_entity":
-        target_cust = str(entities.get("customer_id") or "4521").strip()
-        is_target_laundering = target_cust in laundering_customers
+        target_cust = str(entities.get("customer_id") or "").strip()
+        is_target_laundering = target_cust in laundering_customers if target_cust else False
+
         target_flagged = target_cust in flagged_set or (len(top_entities) > 0 and str(top_entities[0].get("customer_id")) == target_cust)
         target_risk = top_entities[0].get("risk_level", "Unknown") if len(top_entities) > 0 else "Unknown"
         
@@ -291,6 +292,29 @@ def run_agent_query(query: str, csv_path: str = "data/transactions.csv") -> Dict
         # and canonical plan mapping per intent to prevent compounding errors across multi-step chains.
 
         
+        # Check for LLM unavailable halt
+        if plan_meta.get("intent") == "llm_unavailable":
+            context = {
+                "query": query,
+                "df": df,
+                "plan_meta": plan_meta,
+                "executed_tools": [],
+                "explanations": [],
+                "reasoning_trace": plan_meta.get("reasoning_trace", []),
+                "execution_time_sec": time.time() - start_time
+            }
+            print("\n" + "="*70)
+            print("          [!] LLM UNAVAILABLE — EXECUTION HALTED          ")
+            print("="*70)
+            print(f"QUERY:                 \"{query}\"")
+            print(f"PLANNER TYPE:          {plan_meta.get('planner_type')}")
+            print(f"REASON:                {plan_meta.get('reason')}")
+            print("REASONING TRACE:")
+            for idx, step in enumerate(context["reasoning_trace"], 1):
+                print(f"  Step {idx:02d}: {step}")
+            print("="*70 + "\n")
+            return context
+
         # Feature 3: Check for human-in-the-loop clarification
         if plan_meta.get("intent") == "needs_clarification":
             context = {
@@ -315,6 +339,7 @@ def run_agent_query(query: str, csv_path: str = "data/transactions.csv") -> Dict
             print("="*70 + "\n")
             return context
 
+
         # 2. Build initial execution context
         context = {
             "query": query,
@@ -335,8 +360,9 @@ def run_agent_query(query: str, csv_path: str = "data/transactions.csv") -> Dict
             top_cust = top_items[0].get("customer_id")
             top_risk = top_items[0].get("risk_level")
             top_score = top_items[0].get("risk_score")
-            top_action = top_items[0].get("escalation_action", "File SAR (Suspicious Activity Report) & Freeze Account")
+            top_action = top_items[0].get("escalation_action", "Routine Monitoring")
             context["reasoning_trace"].append(f"Result: top flagged Customer {top_cust} risk {top_risk} (score {top_score})")
+
             context["reasoning_trace"].append(f"Escalation Action: {top_action}")
             
             # Build transaction network graph for top flagged customer

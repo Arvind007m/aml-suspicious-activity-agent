@@ -7,6 +7,17 @@ from typing import Dict, Any, List
 import pandas as pd
 import numpy as np
 from registry import register_tool
+from tools.feature_engineering import compute_customer_features
+from config import (
+    STRUCTURING_LOWER_THRESHOLD,
+    CTR_REPORTING_THRESHOLD,
+    LARGE_INBOUND_THRESHOLD,
+    VELOCITY_24H_THRESHOLD,
+    RISK_HIGH_THRESHOLD,
+    RISK_MEDIUM_THRESHOLD,
+    CONFIDENCE_HIGH_SCORE,
+    CONFIDENCE_MEDIUM_SCORE
+)
 
 
 def get_confidence_level(row: dict) -> str:
@@ -20,10 +31,10 @@ def get_confidence_level(row: dict) -> str:
     rapid_cashout = row.get("rapid_cashout_flag", 0)
     risk_score = row.get("risk_score", 0.0)
     anomaly_score = row.get("anomaly_score", 0.0)
-    
-    if structuring_count >= 10 or rapid_cashout == 1 or risk_score >= 75.0:
+
+    if structuring_count >= 10 or rapid_cashout == 1 or risk_score >= CONFIDENCE_HIGH_SCORE:
         return "High"
-    elif structuring_count >= 3 or anomaly_score >= 0.60 or risk_score >= 40.0:
+    elif structuring_count >= 3 or anomaly_score >= 0.60 or risk_score >= CONFIDENCE_MEDIUM_SCORE:
         return "Medium"
     else:
         return "Low"
@@ -31,7 +42,6 @@ def get_confidence_level(row: dict) -> str:
 
 @register_tool("risk_classification")
 def run_risk_classification(context: Dict[str, Any]) -> Dict[str, Any]:
-
     """
     Computes overall risk scores and assigns risk levels (Low, Medium, High).
     Aligns ranking with active aml_pattern (rapid_cash_out vs structuring vs threshold_query).
@@ -42,7 +52,7 @@ def run_risk_classification(context: Dict[str, Any]) -> Dict[str, Any]:
     entities = plan_meta.get("entities", {})
     filters = plan_meta.get("filters", {})
     aml_pattern = plan_meta.get("aml_pattern")
-    
+
     # Check source DataFrame
     if "df_scored" in context:
         df = context["df_scored"].copy()
@@ -50,24 +60,9 @@ def run_risk_classification(context: Dict[str, Any]) -> Dict[str, Any]:
         df = context["df_features"].copy()
         df["anomaly_score"] = 0.0
     else:
-        df_raw = context["df"].copy()
-        df_raw["customer_id"] = df_raw["customer_id"].astype(str)
-        records = []
-        for cust_id, group in df_raw.groupby("customer_id"):
-            struct_cnt = len(group[(group["amount"] >= 9000.0) & (group["amount"] < 10000.0)])
-            records.append({
-                "customer_id": str(cust_id),
-                "txn_count_total": len(group),
-                "total_amount_usd": round(float(group["amount"].sum()), 2),
-                "max_txn_amount": round(float(group["amount"].max()), 2),
-                "avg_txn_amount": round(float(group["amount"].mean()), 2),
-                "structuring_count": struct_cnt,
-                "velocity_24h": min(len(group), 15),
-                "rapid_cashout_flag": 0,
-                "ground_truth_laundering": int(group["is_laundering"].sum()),
-                "anomaly_score": 0.0
-            })
-        df = pd.DataFrame(records)
+        # Use unified compute_customer_features (Fix C3)
+        df = compute_customer_features(context["df"], plan_meta)
+        df["anomaly_score"] = 0.0
 
     df["customer_id"] = df["customer_id"].astype(str)
 
@@ -83,21 +78,19 @@ def run_risk_classification(context: Dict[str, Any]) -> Dict[str, Any]:
             # Prioritize rapid cashout indicators for rapid cash out queries
             if cashout_flag == 1:
                 score += 85.0
-            elif row.get("inbound_deposit_usd", 0.0) > 100000.0:
+            elif row.get("inbound_deposit_usd", 0.0) >= LARGE_INBOUND_THRESHOLD:
                 score += 40.0
             score += ml_anomaly * 15.0
 
         elif aml_pattern == "structuring":
-            # Fix 6: Require structuring_count >= 3 to flag structuring. Single txn (<3) is NOT structuring.
             if struct_cnt >= 10:
                 score += 65.0
             elif struct_cnt >= 3:
                 score += 45.0
             else:
-                # Single transaction < 3 near-threshold does NOT get structuring points
                 score += 0.0
-                
-            if velocity >= 10:
+
+            if velocity >= VELOCITY_24H_THRESHOLD:
                 score += 15.0
             score += ml_anomaly * 20.0
 
@@ -107,36 +100,59 @@ def run_risk_classification(context: Dict[str, Any]) -> Dict[str, Any]:
                 score += 45.0
             elif struct_cnt >= 3:
                 score += 25.0
-                
+
             if cashout_flag == 1:
                 score += 45.0
-                
-            if velocity >= 10:
+
+            if velocity >= VELOCITY_24H_THRESHOLD:
                 score += 15.0
-                
+
             score += ml_anomaly * 20.0
 
         return min(round(score, 1), 100.0)
 
     def get_risk_level(score):
-        if score >= 70.0:
+        if score >= RISK_HIGH_THRESHOLD:
             return "High"
-        elif score >= 40.0:
+        elif score >= RISK_MEDIUM_THRESHOLD:
             return "Medium"
         else:
             return "Low"
 
     df["risk_score"] = df.apply(calculate_risk, axis=1)
-
     df["risk_level"] = df["risk_score"].apply(get_risk_level)
     df["confidence"] = df.apply(lambda r: get_confidence_level(r.to_dict()), axis=1)
 
-
     # --- 2. Filter & Rank Results Based on Active Pattern & Intent ---
     if intent == "single_entity":
-        target_cust = str(entities.get("customer_id") or "4521").strip()
+        target_cust = str(entities.get("customer_id") or "").strip()
+        if not target_cust:
+            # Fix H2: Never default to 4521 if no customer_id extracted
+            records = [{
+                "customer_id": "Unknown",
+                "txn_count_total": 0,
+                "total_amount_usd": 0.0,
+                "max_txn_amount": 0.0,
+                "avg_txn_amount": 0.0,
+                "structuring_count": 0,
+                "velocity_24h": 0,
+                "rapid_cashout_flag": 0,
+                "ground_truth_laundering": 0,
+                "anomaly_score": 0.0,
+                "risk_score": 0.0,
+                "risk_level": "Low",
+                "confidence": "Low",
+                "explanation": "No customer ID detected in query. Please specify a customer ID (e.g., Customer 4521).",
+                "escalation_action": "No Action Required"
+            }]
+            context["df_risk"] = df
+            context["top_suspicious_entities"] = records
+            context["explanations"] = records
+            return context
+
         df_filtered = df[df["customer_id"].astype(str) == target_cust].copy()
         if len(df_filtered) == 0:
+
             # Non-existent customer guard (Fix 1)
             records = [{
                 "customer_id": target_cust,

@@ -203,8 +203,7 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
     target_cust = cust_match.group(1) if cust_match else None
 
 
-    # 4. Threshold Query
-
+    # 4. Threshold Query (Fix M2: Run before single_entity check)
     if ("10+" in q_lower or "10 transactions" in q_lower or "under $10,000" in q_lower or "under 10000" in q_lower):
         res = {
             "planner_type": f"{reason_prefix} (Rule-Engine)",
@@ -216,10 +215,10 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
         }
         return _enforce_canonical_plan(res)
 
-    # Query 4: Single Entity Lookup
-    customer_match = re.search(r"customer\s+(\w+)", q_lower)
-    if customer_match or "is customer" in q_lower:
-        cust_id = customer_match.group(1) if customer_match else "4521"
+    # 5. Single Entity Lookup (Fix M2: Requires digit match, Fix H2: No '4521' default)
+    cust_match = re.search(r'\b(?:customer|cust|id)\s*#?\s*(\d+)\b', q_lower)
+    if cust_match or ("is customer" in q_lower and re.search(r'\d+', q_lower)):
+        cust_id = cust_match.group(1) if cust_match else re.search(r'\d+', q_lower).group(0)
         res = {
             "planner_type": f"{reason_prefix} (Rule-Engine)",
             "intent": "single_entity",
@@ -229,6 +228,7 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
             "reason": f"Single entity lookup for Customer {cust_id}. EDA and feature engineering skipped to evaluate entity risk directly."
         }
         return _enforce_canonical_plan(res)
+
 
     # Rapid Cash Out / Emptied Account Query (Fix 1)
     if any(k in q_lower for k in ["emptied", "cash out", "cash-out", "large deposit", "within an hour", "within 1 hour", "within minutes"]):
@@ -310,8 +310,22 @@ def create_plan(query: str) -> Dict[str, Any]:
 
     
     if not groq_api_key or groq_api_key == "your_groq_api_key_here":
-        print("[!] GROQ_API_KEY not set or default placeholder. Engaging Fallback Rule-Engine.")
-        return _rule_based_fallback_planner(query, reason_prefix="Rule-Engine (LLM Unavailable)")
+        print("[!] GROQ_API_KEY not set or default placeholder. LLM Unavailable.")
+        return {
+            "planner_type": "LLM Unavailable",
+            "intent": "llm_unavailable",
+            "entities": {"customer_id": None},
+            "filters": {"date_range_days": None, "min_amount": None, "max_amount": None, "min_txn_count": None},
+            "aml_pattern": None,
+            "plan": [],
+            "skipped": ["eda", "feature_engineering", "anomaly_detection", "risk_classification", "explanation"],
+            "reason": "LLM Unavailable (Missing API Key). Execution halted.",
+            "reasoning_trace": [
+                f"Parsed query -> '{query}'",
+                "Groq LLM Status -> UNAVAILABLE (Missing API Key)",
+                "Decision: HALT execution — LLM Unavailable"
+            ]
+        }
 
     try:
         from groq import Groq
@@ -337,11 +351,41 @@ def create_plan(query: str) -> Dict[str, Any]:
         return parsed
 
     except (json.JSONDecodeError, KeyError) as e:
-        print(f"[!] Groq LLM Response Parsing Error ({type(e).__name__}: {e}). Engaging Rule-Based Fallback.")
-        return _rule_based_fallback_planner(query, reason_prefix="Rule-Engine (LLM Output Error)")
+        print(f"[!] Groq LLM Response Parsing Error. LLM Unavailable.")
+        return {
+            "planner_type": "LLM Unavailable",
+            "intent": "llm_unavailable",
+            "entities": {"customer_id": None},
+            "filters": {"date_range_days": None, "min_amount": None, "max_amount": None, "min_txn_count": None},
+            "aml_pattern": None,
+            "plan": [],
+            "skipped": ["eda", "feature_engineering", "anomaly_detection", "risk_classification", "explanation"],
+            "reason": "LLM Unavailable. Execution halted.",
+            "reasoning_trace": [
+                f"Parsed query -> '{query}'",
+                "Groq LLM Status -> UNAVAILABLE",
+                "Decision: HALT execution — LLM Unavailable"
+            ]
+        }
     except Exception as e:
-        print(f"[!] Groq API Call Failed or Timed Out ({type(e).__name__}: {e}). Engaging Rule-Based Fallback.")
-        return _rule_based_fallback_planner(query, reason_prefix="Rule-Engine (LLM Unavailable)")
+        print(f"[!] Groq API Call Failed. LLM Unavailable.")
+        return {
+            "planner_type": "LLM Unavailable",
+            "intent": "llm_unavailable",
+            "entities": {"customer_id": None},
+            "filters": {"date_range_days": None, "min_amount": None, "max_amount": None, "min_txn_count": None},
+            "aml_pattern": None,
+            "plan": [],
+            "skipped": ["eda", "feature_engineering", "anomaly_detection", "risk_classification", "explanation"],
+            "reason": "LLM Unavailable. Execution halted.",
+            "reasoning_trace": [
+                f"Parsed query -> '{query}'",
+                "Groq LLM Status -> UNAVAILABLE",
+                "Decision: HALT execution — LLM Unavailable"
+            ]
+        }
+
+
 
 
 
