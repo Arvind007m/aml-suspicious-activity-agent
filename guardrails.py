@@ -25,9 +25,10 @@ def validate_query(query: str) -> Tuple[bool, str, Dict[str, Any]]:
     Returns:
         (is_valid: bool, error_message: str, fallback_plan: dict or None)
     """
-    q_str = str(query).strip()
+    raw_str = str(query).strip()
+    q_str = raw_str.strip('"').strip("'").strip()
 
-    # 1. Empty or whitespace query guard
+    # 1. Empty or whitespace/quotation-only query guard
     if not q_str:
         plan = {
             "planner_type": "Input Guardrail",
@@ -40,11 +41,12 @@ def validate_query(query: str) -> Tuple[bool, str, Dict[str, Any]]:
             "reason": "Empty query received. Please enter a search query.",
             "clarifying_question": "Please enter a valid search query (e.g. 'Analyse this dataset' or 'Is customer 4521 suspicious?').",
             "reasoning_trace": [
-                "Guardrail check -> EMPTY QUERY REJECTED",
+                "Guardrail check -> EMPTY / QUOTE-ONLY QUERY REJECTED",
                 "Decision: HALT execution & prompt user for valid query"
             ]
         }
         return False, "Query cannot be empty. Please enter a search query.", plan
+
 
     # 2. Maximum query length guard (prevent long text abuse)
     if len(q_str) > 500:

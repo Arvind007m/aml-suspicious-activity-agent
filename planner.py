@@ -127,10 +127,10 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
     Fallback deterministic planner when Groq API key is missing or call fails.
     Ensures system NEVER crashes on any query and maps unscripted queries.
     """
-    q_lower = query.lower()
+    q_lower = query.lower().strip().strip('"').strip("'").strip()
 
-    # 1. Empty / Whitespace Query Guard (Fix 1)
-    if not q_lower.strip():
+    # 1. Empty / Whitespace / Quote-only Query Guard (Fix 1)
+    if not q_lower:
         return {
             "planner_type": f"{reason_prefix} (Rule-Engine)",
             "intent": "needs_clarification",
@@ -142,10 +142,11 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
             "reason": "Empty query received. Please enter a search query or select a sample query above.",
             "clarifying_question": "Please enter a valid search query (e.g. 'Analyse this dataset' or 'Is customer 4521 suspicious?').",
             "reasoning_trace": [
-                "Parsed query -> EMPTY QUERY",
+                "Parsed query -> EMPTY / QUOTE-ONLY QUERY",
                 "Decision: HALT execution & prompt user for valid query input"
             ]
         }
+
 
     # 2. Vague Query / Help -> Human-in-the-Loop Clarification (Feature 3)
     if q_lower.strip() in ["check the data", "is this bad?", "what's going on?", "check data", "is anything wrong?", "help"]:
