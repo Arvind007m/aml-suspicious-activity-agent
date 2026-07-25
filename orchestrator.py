@@ -15,6 +15,7 @@ from typing import Dict, Any
 from planner import create_plan
 from registry import execute_tool_chain
 from generate_data import generate_synthetic_aml_data, save_dataset
+from tools.graph_viz import build_transaction_graph
 
 
 def save_supporting_chart(context: Dict[str, Any], output_dir: str = "charts") -> str:
@@ -312,9 +313,15 @@ def run_agent_query(query: str, csv_path: str = "data/transactions.csv") -> Dict
         top_action = top_items[0].get("escalation_action", "File SAR (Suspicious Activity Report) & Freeze Account")
         context["reasoning_trace"].append(f"Result: top flagged Customer {top_cust} risk {top_risk} (score {top_score})")
         context["reasoning_trace"].append(f"Escalation Action: {top_action}")
+        
+        # Build transaction network graph for top flagged customer
+        net_pattern = plan_meta.get("aml_pattern")
+        net_path = build_transaction_graph(df, top_items, net_pattern)
+        if net_path:
+            context["reasoning_trace"].append(f"Generated transaction network graph for customer {top_cust} ({net_pattern or 'general'})")
 
-    
     # 4. Generate supporting visual chart artifact
+
     chart_path = save_supporting_chart(context)
     
     # 5. Output judge-facing execution summary

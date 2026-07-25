@@ -85,11 +85,22 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
                     "reason": plan_meta.get("reason")
                 })
 
-            # --- Chart Artifact ---
+            # --- Supporting Charts & Network Topology ---
             latest_chart = "charts/latest_analysis.png"
-            if os.path.exists(latest_chart):
-                st.subheader("📊 Supporting Visual Chart")
-                st.image(latest_chart, use_container_width=True)
+            latest_network = "charts/latest_network.png"
+
+            col_chart, col_net = st.columns(2)
+            with col_chart:
+                if os.path.exists(latest_chart):
+                    st.subheader("📊 Risk Profile Chart")
+                    st.image(latest_chart, use_container_width=True)
+
+            with col_net:
+                if os.path.exists(latest_network):
+                    st.subheader("🌐 Transaction Network Topology")
+                    st.image(latest_network, use_container_width=True)
+                else:
+                    st.info("No transaction network graph generated for this query.")
 
             # --- Top Flagged Entities ---
             st.subheader("🚨 Top Flagged Suspicious Entities")
@@ -104,3 +115,4 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
                 st.dataframe(df_display, use_container_width=True)
             else:
                 st.info("No suspicious entities flagged for this query.")
+
