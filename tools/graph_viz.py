@@ -218,12 +218,21 @@ def build_transaction_graph(df_raw: pd.DataFrame, top_entities: List[Dict[str, A
             bbox=dict(boxstyle="round,pad=0.25", fc="#1E293B", ec="#334155", alpha=0.85)
         )
 
-    # 9. Title Banners & Output Save
+    # 9. Legend & Title Banners (Fix 6)
+    from matplotlib.lines import Line2D
+    legend_elements = [
+        Line2D([0], [0], marker='o', color='w', label='Target Flagged Entity', markerfacecolor='#EF4444', markersize=11),
+        Line2D([0], [0], marker='o', color='w', label='Inbound Source Account', markerfacecolor='#F59E0B', markersize=9),
+        Line2D([0], [0], marker='o', color='w', label='Outbound Destination Account', markerfacecolor='#10B981', markersize=9)
+    ]
+    ax.legend(handles=legend_elements, loc='upper left', facecolor='#1E293B', edgecolor='#475569', labelcolor='#F8FAFC', fontsize=9.5)
+
     plt.suptitle(title, fontsize=16, fontweight="bold", color="#F8FAFC", y=0.98)
     plt.title(subtitle, fontsize=11.0, fontstyle="italic", color="#94A3B8", y=0.93)
     plt.axis("off")
     plt.tight_layout()
     plt.subplots_adjust(top=0.88)
+
 
 
     timestamp = int(time.time())
