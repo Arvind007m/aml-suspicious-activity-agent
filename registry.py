@@ -10,7 +10,7 @@ Valid tools:
 
 from typing import Dict, List, Callable, Any
 
-# Valid tool registry
+# Valid tool names
 VALID_TOOLS = {
     "eda",
     "feature_engineering",
@@ -19,7 +19,7 @@ VALID_TOOLS = {
     "explanation"
 }
 
-# Registry map will be populated as tools are loaded
+# Map of tool names to functions
 TOOL_REGISTRY: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {}
 
 
@@ -42,11 +42,27 @@ def validate_plan(plan: List[str]) -> List[str]:
     return validated[:6]
 
 
+def load_all_tools():
+    """
+    Loads all tool modules so decorators trigger registration.
+    """
+    import tools.eda
+    import tools.feature_engineering
+    import tools.anomaly_detection
+    import tools.risk_classification
+    import tools.explanation
+
+
 def execute_tool_chain(plan: List[str], context: Dict[str, Any]) -> Dict[str, Any]:
     """
     Executes an ordered list of tools sequentially, passing updated context along.
     """
+    load_all_tools()
     context["executed_tools"] = []
+    
+    print("\n" + "="*50)
+    print("           EXECUTING AGENT TOOL CHAIN             ")
+    print("="*50)
     
     for tool_name in plan:
         if tool_name in TOOL_REGISTRY:
