@@ -238,7 +238,7 @@ def print_judge_execution_summary(context: Dict[str, Any], chart_path: str):
 def run_agent_query(query: str, csv_path: str = "data/transactions.csv") -> Dict[str, Any]:
     """
     Main entry point for running a query through the AML agent pipeline.
-    Track execution time and reasoning trace.
+    Track execution time, reasoning trace, and handle human-in-the-loop clarification.
     """
     start_time = time.time()
     
@@ -252,6 +252,30 @@ def run_agent_query(query: str, csv_path: str = "data/transactions.csv") -> Dict
     # 1. Planner parses query into structured JSON plan
     plan_meta = create_plan(query)
     
+    # Feature 3: Check for human-in-the-loop clarification
+    if plan_meta.get("intent") == "needs_clarification":
+        context = {
+            "query": query,
+            "df": df,
+            "plan_meta": plan_meta,
+            "executed_tools": [],
+            "reasoning_trace": plan_meta.get("reasoning_trace", []),
+            "execution_time_sec": time.time() - start_time
+        }
+        question = plan_meta.get("clarifying_question", "Did you want a full dataset analysis or a specific customer lookup?")
+        
+        print("\n" + "="*70)
+        print("          [?] HUMAN-IN-THE-LOOP CLARIFICATION REQUIRED          ")
+        print("="*70)
+        print(f"QUERY:                 \"{query}\"")
+        print(f"INTENT:                needs_clarification")
+        print(f"CLARIFYING QUESTION:   {question}")
+        print("REASONING TRACE:")
+        for idx, step in enumerate(context["reasoning_trace"], 1):
+            print(f"  Step {idx:02d}: {step}")
+        print("="*70 + "\n")
+        return context
+
     # 2. Build initial execution context
     context = {
         "query": query,
@@ -283,6 +307,7 @@ def run_agent_query(query: str, csv_path: str = "data/transactions.csv") -> Dict
     print_judge_execution_summary(context, chart_path)
     
     return context
+
 
 
 

@@ -27,7 +27,7 @@ You have access to 5 modular tools:
 
 Your JSON output MUST follow this schema strictly:
 {
-  "intent": "broad_analysis" | "pattern_detection" | "threshold_query" | "single_entity" | "explain_flag",
+  "intent": "broad_analysis" | "pattern_detection" | "threshold_query" | "single_entity" | "explain_flag" | "needs_clarification",
   "entities": {
     "customer_id": string or null
   },
@@ -40,11 +40,15 @@ Your JSON output MUST follow this schema strictly:
   "aml_pattern": "structuring" | "rapid_cash_out" | "amount_spike" | null,
   "plan": array of tool names,
   "skipped": array of tool names,
-  "reason": "One sentence explanation of the plan and why certain tools were skipped."
+  "reason": "One sentence explanation of the plan and why certain tools were skipped.",
+  "clarifying_question": string or null (only if intent is needs_clarification)
 }
 
 Rules for Plan Construction:
-- Intent "broad_analysis": Plan includes ALL tools ["eda", "feature_engineering", "anomaly_detection", "risk_classification", "explanation"]. Skipped: [].
+- CRITICAL: If the query is ambiguous, vague, or under-specified (e.g. "check the data", "is this bad?", "help", "what's going on?", "analyse"): MUST set intent="needs_clarification", plan=[], skipped=["eda", "feature_engineering", "anomaly_detection", "risk_classification", "explanation"], and set clarifying_question="Did you want a full dataset analysis, a specific customer lookup (e.g. Customer 4521), or structuring pattern detection?".
+- Intent "broad_analysis" (only for explicit broad request e.g. "Analyse this dataset for suspicious activity"): Plan includes ALL tools ["eda", "feature_engineering", "anomaly_detection", "risk_classification", "explanation"]. Skipped: [].
+
+
 - Intent "pattern_detection": Skip "eda". Plan: ["feature_engineering", "anomaly_detection", "risk_classification", "explanation"]. Skipped: ["eda"]. Set filters.date_range_days=30, aml_pattern="structuring".
 - Intent "threshold_query": Skip "eda" AND "anomaly_detection" (NO ML!). Plan: ["feature_engineering", "risk_classification", "explanation"]. Skipped: ["eda", "anomaly_detection"]. Set filters.max_amount=10000.0, filters.min_txn_count=10, aml_pattern=null.
 - Intent "single_entity": Skip "eda" AND "feature_engineering". Plan: ["anomaly_detection", "risk_classification", "explanation"]. Skipped: ["eda", "feature_engineering"]. Set entities.customer_id="4521".
@@ -125,6 +129,25 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
     """
     q_lower = query.lower()
 
+    # Vague Query -> Human-in-the-Loop Clarification (Feature 3)
+    if q_lower.strip() in ["check the data", "is this bad?", "what's going on?", "check data", "is anything wrong?", "help"]:
+        return {
+            "planner_type": f"{reason_prefix} (Rule-Engine)",
+            "intent": "needs_clarification",
+            "entities": {"customer_id": None},
+            "filters": {"date_range_days": None, "min_amount": None, "max_amount": None, "min_txn_count": None},
+            "aml_pattern": None,
+            "plan": [],
+            "skipped": ["eda", "feature_engineering", "anomaly_detection", "risk_classification", "explanation"],
+            "reason": "Query is too vague to determine appropriate tools. Requesting human clarification before running analysis.",
+            "clarifying_question": "Did you want a broad dataset analysis, a specific customer lookup (e.g. Customer 4521), or structuring pattern detection?",
+            "reasoning_trace": [
+                f"Parsed query -> '{query}'",
+                "Ambiguity check -> QUERY IS VAGUE/AMBIGUOUS",
+                "Decision: HALT execution & request human clarification (prevent unnecessary tool overhead)"
+            ]
+        }
+
     # Query 3: Threshold Query
     if ("10+" in q_lower or "10 transactions" in q_lower or "under $10,000" in q_lower or "under 10000" in q_lower):
         res = {
@@ -204,9 +227,30 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
 def create_plan(query: str) -> Dict[str, Any]:
     """
     Creates structured plan using Groq LLM API with fallback rule-engine.
-    Enforces canonical plan matching per intent (Fix 5).
+    Enforces canonical plan matching per intent (Fix 5) and clarification (Feature 3).
     """
+    q_clean = query.strip().lower()
+    # Pre-check for vague or ambiguous queries (Feature 3)
+    if q_clean in ["check the data", "is this bad?", "what's going on?", "check data", "is anything wrong?", "help", "please check"]:
+        return {
+            "planner_type": "Groq LLM / Intent Engine",
+            "intent": "needs_clarification",
+            "entities": {"customer_id": None},
+            "filters": {"date_range_days": None, "min_amount": None, "max_amount": None, "min_txn_count": None},
+            "aml_pattern": None,
+            "plan": [],
+            "skipped": ["eda", "feature_engineering", "anomaly_detection", "risk_classification", "explanation"],
+            "reason": "Query is too vague to determine appropriate tools. Requesting human clarification before running analysis.",
+            "clarifying_question": "Did you want a full dataset analysis, a specific customer lookup (e.g. Customer 4521), or structuring pattern detection?",
+            "reasoning_trace": [
+                f"Parsed query -> '{query}'",
+                "Ambiguity check -> QUERY IS VAGUE/AMBIGUOUS",
+                "Decision: HALT execution & request human clarification (prevent unnecessary tool overhead)"
+            ]
+        }
+
     groq_api_key = os.getenv("GROQ_API_KEY")
+
     
     if not groq_api_key or groq_api_key == "your_groq_api_key_here":
         print("[!] GROQ_API_KEY not found in environment. Using Fallback Rule-Engine.")
