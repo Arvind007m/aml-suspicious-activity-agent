@@ -245,3 +245,79 @@ def build_transaction_graph(df_raw: pd.DataFrame, top_entities: List[Dict[str, A
 
     print(f"  [Network Graph Saved]: {latest_path}")
     return latest_path
+
+
+def build_flow_dot(plan_meta: Dict[str, Any], result_summary: str = "") -> str:
+    """
+    Constructs a Graphviz DOT string visualizing the agent's decision and tool execution flow.
+    Executed tools in plan are rendered in solid GREEN connected in main sequence.
+    Skipped tools are rendered in dashed GREY off the main flow path.
+    """
+    intent = plan_meta.get("intent", "broad_analysis")
+    aml_pattern = plan_meta.get("aml_pattern") or "None"
+    plan = plan_meta.get("plan", [])
+    skipped = plan_meta.get("skipped", [])
+    entities = plan_meta.get("entities", {})
+    cust_id = entities.get("customer_id")
+    
+    # Format planner label
+    cust_str = f" | cust: {cust_id}" if cust_id else ""
+    planner_label = f"Supervisor Planner\\nintent: {intent}{cust_str}\\npattern: {aml_pattern}"
+    
+    # All 5 canonical tools in pipeline order
+    all_tools = ["eda", "feature_engineering", "anomaly_detection", "risk_classification", "explanation"]
+    
+    result_label = result_summary if result_summary else "Analysis Complete"
+
+    dot_lines = [
+        'digraph AgentExecutionFlow {',
+        '  rankdir=LR;',
+        '  bgcolor="transparent";',
+        '  node [fontname="Helvetica", fontsize=11, shape=box, style="filled,rounded", margin="0.25,0.12"];',
+        '  edge [fontname="Helvetica", fontsize=9, color="#64748B"];',
+        '',
+        '  // Entry & Planner nodes',
+        '  query [label="User Query", fillcolor="#1E293B", fontcolor="#F8FAFC", color="#475569", style="filled,solid"];',
+        f'  planner [label="{planner_label}", fillcolor="#312E81", fontcolor="#EEF2FF", color="#6366F1", style="filled,solid"];',
+        '  query -> planner [color="#6366F1", penwidth=2.0];',
+    ]
+
+    # Guard for human clarification or no tools executed
+    if intent == "needs_clarification" or not plan:
+        clarify_q = plan_meta.get("clarifying_question", "Clarification Required")
+        dot_lines.append(f'  halt [label="HALTED\\n{clarify_q}", fillcolor="#7C2D12", fontcolor="#FFEDD5", color="#F97316", style="filled,solid"];')
+        dot_lines.append('  planner -> halt [color="#F97316", penwidth=2.0];')
+        dot_lines.append('}')
+        return '\n'.join(dot_lines)
+
+    # Add nodes for all 5 tools
+    for tool in all_tools:
+        if tool in plan:
+            # Executed tool: Solid GREEN
+            tool_label = f"{tool}\\n(executed)"
+            dot_lines.append(f'  {tool} [label="{tool_label}", fillcolor="#065F46", fontcolor="#D1FAE5", color="#10B981", style="filled,solid"];')
+        else:
+            # Skipped tool: Dashed GREY
+            tool_label = f"{tool}\\n(skipped)"
+            dot_lines.append(f'  {tool} [label="{tool_label}", fillcolor="#1F2937", fontcolor="#9CA3AF", color="#4B5563", style="filled,dashed"];')
+
+    # Main Arrow Path: Connect planner -> first executed tool -> ... -> last executed tool -> result
+    executed_in_order = [t for t in all_tools if t in plan]
+    
+    prev_node = "planner"
+    for tool in executed_in_order:
+        dot_lines.append(f'  {prev_node} -> {tool} [color="#10B981", penwidth=2.5];')
+        prev_node = tool
+
+    # Result Node
+    dot_lines.append(f'  result [label="{result_label}", fillcolor="#1E3A8A", fontcolor="#DBEAFE", color="#3B82F6", style="filled,solid"];')
+    dot_lines.append(f'  {prev_node} -> result [color="#3B82F6", penwidth=2.5];')
+
+    # Connect skipped tools off the main path with faint grey dotted edges
+    for tool in all_tools:
+        if tool not in plan:
+            dot_lines.append(f'  planner -> {tool} [color="#4B5563", style="dotted", penwidth=1.0];')
+
+    dot_lines.append('}')
+    return '\n'.join(dot_lines)
+

@@ -7,6 +7,8 @@ import os
 import pandas as pd
 import streamlit as st
 from orchestrator import run_agent_query, calculate_detection_metrics
+from tools.graph_viz import build_flow_dot
+
 
 st.set_page_config(
     page_title="AI AML Agent - Dynamic Planner",
@@ -121,8 +123,15 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
                 </div>
                 """, unsafe_allow_html=True)
 
-            # --- 3. Compress & Color Reasoning Trace (Fix 3) ---
+            # --- 3. Agent Execution Flow Visual Diagram ---
+            st.subheader("🌐 Agent Execution Flow")
+            res_summary_txt = f"{high_risk_cnt} High Risk Flagged" if high_risk_cnt > 0 else "Analysis Complete"
+            flow_dot_code = build_flow_dot(plan_meta, result_summary=res_summary_txt)
+            st.graphviz_chart(flow_dot_code)
+
+            # --- 4. Compress & Color Reasoning Trace ---
             st.subheader("🧠 Live Agent Reasoning Trace")
+
             
             # Separate decision steps from verbose tool execution logs
             decision_steps = [s for s in trace if not s.startswith("Step") or "Running" not in s]
