@@ -55,11 +55,13 @@ def load_all_tools():
 
 def execute_tool_chain(plan: List[str], context: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Executes an ordered list of tools sequentially, passing updated context along.
+    Executes an ordered list of tools sequentially, updating context and reasoning trace.
     """
     load_all_tools()
     context["executed_tools"] = []
-    
+    if "reasoning_trace" not in context:
+        context["reasoning_trace"] = []
+        
     print("\n" + "="*50)
     print("           EXECUTING AGENT TOOL CHAIN             ")
     print("="*50)
@@ -67,6 +69,7 @@ def execute_tool_chain(plan: List[str], context: Dict[str, Any]) -> Dict[str, An
     for tool_name in plan:
         if tool_name in TOOL_REGISTRY:
             print(f"  [-> Running Tool]: {tool_name}")
+            context["reasoning_trace"].append(f"Running {tool_name} tool...")
             context = TOOL_REGISTRY[tool_name](context)
             context["executed_tools"].append(tool_name)
         else:

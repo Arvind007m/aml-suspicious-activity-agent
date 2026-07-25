@@ -80,8 +80,12 @@ CANONICAL_PLANS = {
 def _enforce_canonical_plan(parsed: Dict[str, Any]) -> Dict[str, Any]:
     """
     Enforces canonical tool plan and skipped arrays based on intent (Fix 5).
+    Builds narrated reasoning_trace step-by-step (Feature 1).
     """
     intent = parsed.get("intent", "broad_analysis")
+    entities = parsed.get("entities", {})
+    cust_id = entities.get("customer_id")
+    
     if intent in CANONICAL_PLANS:
         parsed["plan"] = list(CANONICAL_PLANS[intent]["plan"])
         parsed["skipped"] = list(CANONICAL_PLANS[intent]["skipped"])
@@ -89,7 +93,29 @@ def _enforce_canonical_plan(parsed: Dict[str, Any]) -> Dict[str, Any]:
         parsed["intent"] = "broad_analysis"
         parsed["plan"] = list(CANONICAL_PLANS["broad_analysis"]["plan"])
         parsed["skipped"] = list(CANONICAL_PLANS["broad_analysis"]["skipped"])
+        
+    trace = [
+        f"Parsed query -> intent: {parsed['intent']}",
+        f"Detected entity: customer_id = {cust_id}" if cust_id else "No specific entity constraint specified.",
+    ]
+    
+    # Narrate tool skip reasons
+    skip_reasons = {
+        "eda": "single-entity/targeted query, broad dataset exploration not required",
+        "feature_engineering": "evaluating single known entity directly without re-aggregating dataset",
+        "anomaly_detection": "threshold aggregation query only, ML anomaly scoring deliberately skipped"
+    }
+    
+    for skipped_tool in parsed["skipped"]:
+        reason = skip_reasons.get(skipped_tool, "not required for this intent")
+        trace.append(f"Decision: SKIP {skipped_tool} ({reason})")
+        
+    for tool_name in parsed["plan"]:
+        trace.append(f"Decision: EXECUTE {tool_name}")
+        
+    parsed["reasoning_trace"] = trace
     return parsed
+
 
 
 def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule Engine") -> Dict[str, Any]:

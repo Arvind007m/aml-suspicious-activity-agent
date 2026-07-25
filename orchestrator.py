@@ -152,11 +152,18 @@ def calculate_detection_metrics(context: Dict[str, Any]) -> Dict[str, Any]:
 def print_judge_execution_summary(context: Dict[str, Any], chart_path: str):
     """
     Prints a clean, judge-facing execution summary detailing plan, execution, metrics, and explanations.
+    Includes Live Reasoning Trace (Feature 1) and Efficiency Savings Metrics (Feature 5).
     """
     plan_meta = context["plan_meta"]
     metrics = calculate_detection_metrics(context)
     explanations = context.get("explanations", [])
+    trace = context.get("reasoning_trace", plan_meta.get("reasoning_trace", []))
     
+    tools_run_cnt = len(context.get('executed_tools', []))
+    total_tools = 5
+    saved_overhead = int(((total_tools - tools_run_cnt) / total_tools) * 100)
+    exec_time = context.get("execution_time_sec", 0.0)
+
     print("\n" + "="*70)
     print("                JUDGE-FACING EXECUTION SUMMARY                 ")
     print("="*70)
@@ -169,6 +176,19 @@ def print_judge_execution_summary(context: Dict[str, Any], chart_path: str):
     print(f"SKIPPED:       {plan_meta.get('skipped')}")
     print(f"TOOLS RUN:     {context.get('executed_tools')}")
     print(f"PLAN REASON:   {plan_meta.get('reason')}")
+
+    print("-" * 70)
+    print("               LIVE AGENT REASONING TRACE                      ")
+    print("-" * 70)
+    for idx, step in enumerate(trace, 1):
+        print(f"  Step {idx:02d}: {step}")
+
+    print("-" * 70)
+    print("               EFFICIENCY SAVINGS METRICS                      ")
+    print("-" * 70)
+    print(f"  * Tools Invoked:       {tools_run_cnt} of {total_tools} available")
+    print(f"  * Pipeline Overhead:   Saved {saved_overhead}% tool overhead (Full pipeline = 5 tools; query needed {tools_run_cnt})")
+    print(f"  * Execution Time:      {exec_time:.2f}s")
     
     print("-" * 70)
     print("             GROUND TRUTH DETECTION METRICS                    ")
@@ -218,7 +238,10 @@ def print_judge_execution_summary(context: Dict[str, Any], chart_path: str):
 def run_agent_query(query: str, csv_path: str = "data/transactions.csv") -> Dict[str, Any]:
     """
     Main entry point for running a query through the AML agent pipeline.
+    Track execution time and reasoning trace.
     """
+    start_time = time.time()
+    
     if not os.path.exists(csv_path):
         print(f"[!] Dataset not found at {csv_path}. Generating synthetic dataset...")
         save_dataset(csv_path)
@@ -233,11 +256,25 @@ def run_agent_query(query: str, csv_path: str = "data/transactions.csv") -> Dict
     context = {
         "query": query,
         "df": df,
-        "plan_meta": plan_meta
+        "plan_meta": plan_meta,
+        "reasoning_trace": list(plan_meta.get("reasoning_trace", []))
     }
     
     # 3. Execute tools specified in plan
     context = execute_tool_chain(plan_meta["plan"], context)
+    
+    # Record execution duration
+    context["execution_time_sec"] = time.time() - start_time
+    
+    # Add final result summary to trace
+    top_items = context.get("top_suspicious_entities", [])
+    if top_items:
+        top_cust = top_items[0].get("customer_id")
+        top_risk = top_items[0].get("risk_level")
+        top_score = top_items[0].get("risk_score")
+        top_action = top_items[0].get("escalation_action")
+        context["reasoning_trace"].append(f"Result: top flagged Customer {top_cust} risk {top_risk} (score {top_score})")
+        context["reasoning_trace"].append(f"Escalation Action: {top_action}")
     
     # 4. Generate supporting visual chart artifact
     chart_path = save_supporting_chart(context)
@@ -246,6 +283,7 @@ def run_agent_query(query: str, csv_path: str = "data/transactions.csv") -> Dict
     print_judge_execution_summary(context, chart_path)
     
     return context
+
 
 
 if __name__ == "__main__":
