@@ -129,6 +129,16 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
     """
     q_lower = query.lower().strip().strip('"').strip("'").strip()
 
+    AML_KEYWORDS = {
+
+
+        "analyse", "analyze", "dataset", "suspicious", "laundering", "risk", "top", "customer", 
+        "cust", "structuring", "smurfing", "cash", "deposit", "wire", "transfer", "pattern", 
+        "rapid", "emptied", "channel", "compare", "transaction", "amount", "under", "threshold", 
+        "flagged", "report", "summary", "id", "account", "user", "check", "bad", "help", "find", 
+        "which", "show", "who", "is", "all", "data", "money", "outflow", "inflow", "txns", "count"
+    }
+
     # 1. Empty / Whitespace / Quote-only Query Guard (Fix 1)
     if not q_lower:
         return {
@@ -147,8 +157,29 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
             ]
         }
 
+    # 2. Meaningless / Unrecognized Query Guard
+    words = set(re.findall(r'\b[a-zA-Z0-9]+\b', q_lower))
+    has_recognized_word = bool(words.intersection(AML_KEYWORDS)) or any(c.isdigit() for c in q_lower)
+    
+    if not has_recognized_word:
+        return {
+            "planner_type": f"{reason_prefix} (Rule-Engine)",
+            "intent": "needs_clarification",
+            "entities": {"customer_id": None},
+            "filters": {"date_range_days": None, "min_amount": None, "max_amount": None, "min_txn_count": None},
+            "aml_pattern": None,
+            "plan": [],
+            "skipped": ["eda", "feature_engineering", "anomaly_detection", "risk_classification", "explanation"],
+            "reason": "Query is unrecognized or meaningless. Requesting valid search input.",
+            "clarifying_question": "Unrecognized search query. Please enter an AML investigation query (e.g. 'Analyse this dataset', 'Is customer 4521 suspicious?', or 'Find structuring patterns').",
+            "reasoning_trace": [
+                f"Parsed query -> '{query}'",
+                "Unrecognized input check -> NO RECOGNIZED AML OR FINANCIAL KEYWORDS DETECTED",
+                "Decision: HALT execution & request valid search query input"
+            ]
+        }
 
-    # 2. Vague Query / Help -> Human-in-the-Loop Clarification (Feature 3)
+    # 3. Vague Query / Help -> Human-in-the-Loop Clarification (Feature 3)
     if q_lower.strip() in ["check the data", "is this bad?", "what's going on?", "check data", "is anything wrong?", "help"]:
         return {
             "planner_type": f"{reason_prefix} (Rule-Engine)",
@@ -167,10 +198,10 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
             ]
         }
 
-    # 3. Non-Existent Customer Lookup Guard
-    import re
+    # 4. Non-Existent Customer Lookup Guard
     cust_match = re.search(r'\b(?:customer|cust|id)\s*#?\s*(\d+)\b', q_lower)
     target_cust = cust_match.group(1) if cust_match else None
+
 
     # 4. Threshold Query
 

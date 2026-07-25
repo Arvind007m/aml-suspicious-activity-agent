@@ -10,7 +10,6 @@ from orchestrator import run_agent_query, calculate_detection_metrics
 
 st.set_page_config(
     page_title="AI AML Agent - Dynamic Planner",
-    page_icon="🛡️",
     layout="wide"
 )
 
@@ -37,7 +36,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🛡️ AI-Powered AML Suspicious Activity Agent")
+st.title("AI-Powered AML Suspicious Activity Agent")
 st.caption("Powered by Groq LLM Planner (`llama-3.3-70b-versatile`) & Dynamic Tool Execution")
 
 st.markdown("""
