@@ -6,7 +6,7 @@ Unlike traditional fixed sequential pipelines, this system is a **true autonomou
 
 ---
 
-## 🌟 Hackathon Winning Features
+## 🌟 Hackathon Features
 
 1. **Live Narrated Reasoning Trace**: Step-by-step visibility into every agent decision (`Parsed query`, `Detected entity`, `SKIP reason`, `EXECUTE tool`, `Result`, `Escalation Action`).
 2. **Generalization Beyond Scripted Queries**: Handles unscripted natural-language prompts like *"Show me customers who received large deposits then emptied their account within an hour"* or *"Who are the top 5 riskiest customers?"*.
@@ -16,6 +16,22 @@ Unlike traditional fixed sequential pipelines, this system is a **true autonomou
 6. **Evidence-Backed Explanations**: Flags cite concrete numerical evidence (exact deposit counts, amount ranges $9,100–$9,950, total volumes, and time windows).
 
 ---
+
+## 🛡️ Reliability Engineering
+
+This agent implements industry-standard production reliability engineering patterns for financial AML compliance:
+
+1. **Validated Tool Harness (`registry.py`)**: Every tool invocation is validated against registered metadata before execution—preventing unsafe or malformed tool execution.
+2. **Supervisor / Planner Routing (`planner.py`)**: A central supervisor planner classifies query intent, extracts structured entities and filters, and routes queries directly to specialist tools.
+3. **Bounded Iteration & Canonical Plan Enforcement**: Mitigates compounding errors across multi-step chains by enforcing a strict maximum execution cap (<= 5 tools) and canonical tool mapping per intent.
+4. **Human-in-the-Loop Clarification**: Automatically intercepts vague or ambiguous queries (e.g. *"check the data"*), asks a clarifying question, and halts tool execution to prevent unnecessary computation overhead.
+5. **Trace-Level Evals (`tests/test_agent_eval.py`)**: Includes a deterministic, offline-safe test suite runnable via `pytest` or plain `python` that asserts tool-selection logic, detection accuracy, and 100% scoring determinism.
+6. **Graceful Degradation (Offline Fallback Planner)**: Automatically falls back to a rule-based planner if the LLM API is unavailable, network-partitioned, or rate-limited, ensuring zero downtime.
+7. **Input Guardrails (`guardrails.py`)**: Intercepts queries prior to planning to enforce query length caps (<= 500 chars), reject empty inputs, and sanitize potentially malicious patterns (`DROP TABLE`, `rm -rf`, `<script`).
+8. **Multi-Signal Confidence Scoring & Escalation Safety (`tools/risk_classification.py` & `explanation.py`)**: Computes a `confidence` signal (`High`, `Medium`, `Low`) for every flagged entity. Low-confidence flags are automatically downgraded to `"Routine Monitoring"`—never recommending severe actions like `"File SAR & Freeze Account"` on weak signals.
+
+---
+
 
 ## 🏗️ System Architecture
 
