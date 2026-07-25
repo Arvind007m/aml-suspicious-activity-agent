@@ -336,9 +336,13 @@ def create_plan(query: str) -> Dict[str, Any]:
         parsed = _enforce_canonical_plan(parsed)
         return parsed
 
+    except (json.JSONDecodeError, KeyError) as e:
+        print(f"[!] Groq LLM Response Parsing Error ({type(e).__name__}: {e}). Engaging Rule-Based Fallback.")
+        return _rule_based_fallback_planner(query, reason_prefix="Rule-Engine (LLM Output Error)")
     except Exception as e:
-        print(f"[!] Groq API unavailable or timed out ({e}). Engaging Rule-Based Fallback.")
+        print(f"[!] Groq API Call Failed or Timed Out ({type(e).__name__}: {e}). Engaging Rule-Based Fallback.")
         return _rule_based_fallback_planner(query, reason_prefix="Rule-Engine (LLM Unavailable)")
+
 
 
 

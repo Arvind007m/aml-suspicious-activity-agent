@@ -152,8 +152,9 @@ def run_risk_classification(context: Dict[str, Any]) -> Dict[str, Any]:
                 "risk_score": 0.0,
                 "risk_level": "Low",
                 "confidence": "Low",
-                "explanation": f"No transactions found for customer {target_cust} in dataset.",
+                "explanation": f"No transactions found for customer {target_cust}. Cannot assess risk.",
                 "escalation_action": "No Action Required"
+
             }]
             context["df_risk"] = df
             context["top_suspicious_entities"] = records

@@ -19,7 +19,12 @@ def _generate_template_explanations(top_entities: List[Dict[str, Any]], aml_patt
     """
     explained = []
     for item in top_entities:
+        if item.get("txn_count_total", 0) == 0 and "No transactions found" in str(item.get("explanation", "")):
+            explained.append(dict(item))
+            continue
+
         cust_id = str(item.get("customer_id"))
+
         risk_level = item.get("risk_level", "Low")
         struct_cnt = item.get("structuring_count", 0)
         cashout = item.get("rapid_cashout_flag", 0)
