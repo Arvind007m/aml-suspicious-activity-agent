@@ -1,39 +1,35 @@
 # AI-Powered Anti-Money-Laundering (AML) Detection Agent
 
-An intelligent, autonomous Anti-Money-Laundering (AML) agent powered by an **LLM Dynamic Planner** (`Groq API`, model `llama-3.3-70b-versatile`) and modular tools.
+An intelligent, autonomous Anti-Money-Laundering (AML) agent powered by an **LLM Dynamic Planner** (`Groq API`, model `llama-3.3-70b-versatile`) with a **Local AI Engine fallback** and modular analysis tools.
 
 Unlike traditional fixed sequential pipelines, this system is a **true autonomous agent**—it evaluates natural language user queries, dynamically constructs a structured JSON execution plan, selects only the required tools, and deliberately skips unnecessary computation before executing analysis.
 
 ---
 
-## 🌟 Hackathon Features
+## Key Features
 
 1. **Live Narrated Reasoning Trace**: Step-by-step visibility into every agent decision (`Parsed query`, `Detected entity`, `SKIP reason`, `EXECUTE tool`, `Result`, `Escalation Action`).
-2. **Generalization Beyond Scripted Queries**: Handles unscripted natural-language prompts like *"Show me customers who received large deposits then emptied their account within an hour"* or *"Who are the top 5 riskiest customers?"*.
-3. **Human-in-the-Loop Clarification**: When queries are vague (e.g. *"check the data"*), the agent detects ambiguity, asks a clarifying question, and halts tool execution to save overhead.
-4. **False-Positive Reduction Proof**: Benchmarks the agent against a naive rule baseline (flags > $9,000 txns), proving a **100% reduction in false positives**.
-5. **Efficiency Savings Metric**: Tracks tool invocation savings (e.g., *"Saved 40% tool overhead; 3 of 5 tools needed"*) and wall-clock execution time.
-6. **Evidence-Backed Explanations**: Flags cite concrete numerical evidence (exact deposit counts, amount ranges $9,100–$9,950, total volumes, and time windows).
+2. **Dynamic Money Flow Network Topology**: Renders directed account-to-account transfer topology graphs for layering and rapid cash-out detection.
+3. **Human-in-the-Loop Clarification**: Automatically intercepts ambiguous queries (e.g. *"check the data"*), asks a clarifying question, and halts tool execution to prevent wasted compute overhead.
+4. **Dynamic Non-Existent Customer Guard**: Checks entity existence in the database before running tools—halting with `0 tools run` if a customer ID does not exist.
+5. **False-Positive Reduction Benchmarks**: Proves a **100% false-positive reduction** against a naive rule baseline (> $9,000 threshold).
+6. **Efficiency Savings Metric**: Tracks tool invocation savings (e.g. *"Saved 40% tool overhead; 3 of 5 tools needed"*) and wall-clock execution time.
+7. **Zero-Downtime Local AI Engine**: Seamlessly falls back to a deterministic Local AI Engine if the Groq LLM API key is missing or rate-limited.
 
 ---
 
-## 🛡️ Reliability Engineering
+## Reliability Engineering
 
-This agent implements industry-standard production reliability engineering patterns for financial AML compliance:
-
-1. **Validated Tool Harness (`registry.py`)**: Every tool invocation is validated against registered metadata before execution—preventing unsafe or malformed tool execution.
-2. **Supervisor / Planner Routing (`planner.py`)**: A central supervisor planner classifies query intent, extracts structured entities and filters, and routes queries directly to specialist tools.
-3. **Bounded Iteration & Canonical Plan Enforcement**: Mitigates compounding errors across multi-step chains by enforcing a strict maximum execution cap (<= 5 tools) and canonical tool mapping per intent.
-4. **Human-in-the-Loop Clarification**: Automatically intercepts vague or ambiguous queries (e.g. *"check the data"*), asks a clarifying question, and halts tool execution to prevent unnecessary computation overhead.
-5. **Trace-Level Evals (`tests/test_agent_eval.py`)**: Includes a deterministic, offline-safe test suite runnable via `pytest` or plain `python` that asserts tool-selection logic, detection accuracy, and 100% scoring determinism.
-6. **Graceful Degradation (Offline Fallback Planner)**: Automatically falls back to a rule-based planner if the LLM API is unavailable, network-partitioned, or rate-limited, ensuring zero downtime.
-7. **Input Guardrails (`guardrails.py`)**: Intercepts queries prior to planning to enforce query length caps (<= 500 chars), reject empty inputs, and sanitize potentially malicious patterns (`DROP TABLE`, `rm -rf`, `<script`).
-8. **Multi-Signal Confidence Scoring & Escalation Safety (`tools/risk_classification.py` & `explanation.py`)**: Computes a `confidence` signal (`High`, `Medium`, `Low`) for every flagged entity. Low-confidence flags are automatically downgraded to `"Routine Monitoring"`—never recommending severe actions like `"File SAR & Freeze Account"` on weak signals.
+1. **Validated Tool Harness (`registry.py`)**: Every tool invocation is validated against registered metadata before execution.
+2. **Supervisor / Planner Routing (`planner.py`)**: Classifies query intent, extracts structured entities and date filters, and routes queries directly to specialist tools.
+3. **Cap & Canonical Plan Enforcement**: Enforces a strict execution cap (<= 5 tools) and canonical tool mapping per intent to prevent compounding multi-step errors.
+4. **Input Guardrails (`guardrails.py`)**: Intercepts queries prior to planning to enforce query length caps (<= 500 chars), reject empty inputs, and sanitize malicious patterns (`DROP TABLE`, `rm -rf`, `<script`).
+5. **Trace-Level Evaluation Suite (`tests/test_agent_eval.py`)**: Includes a deterministic, offline-safe test suite runnable via `pytest` or plain `python` that asserts tool-selection logic, detection accuracy, and 100% scoring determinism.
+6. **Multi-Signal Risk Scoring (`tools/risk_classification.py`)**: Low-confidence flags are automatically downgraded to `"Routine Monitoring"`—preventing false escalation recommendations.
 
 ---
 
-
-## 🏗️ System Architecture
+## System Architecture
 
 ```
                        +-----------------------------------+
@@ -42,20 +38,21 @@ This agent implements industry-standard production reliability engineering patte
                                          |
                                          v
                        +-----------------------------------+
-                       |       planner.py (Groq LLM)       |
+                       |       planner.py (Groq LLM /      |
+                       |          Local AI Engine)         |
                        | - Detects Intent / Clarification  |
                        | - Generates Live Reasoning Trace  |
                        | - Maps to Canonical Plan          |
                        +-----------------+-----------------+
                                          |
                +-------------------------+-------------------------+
-               | (If needs_clarification)|                         | (If clear query)
-               v                         |                         v
-  +--------------------------+           |          +----------------------------+
-  | Prompts User for Intent  |           |          |  registry.py Tool Pipeline |
-  | (Halts tool execution)   |           |          |  - eda.py                  |
-  +--------------------------+           |          |  - feature_engineering.py  |
-                                         |          |  - anomaly_detection.py    |
+               | (If needs_clarification |                         | (If clear query)
+               |  or customer_not_found) |                         v
+               v                         |          +----------------------------+
+  +--------------------------+           |          |  registry.py Tool Pipeline |
+  | Prompts User / Halts     |           |          |  - eda.py                  |
+  | Tool Execution (0 Tools) |           |          |  - feature_engineering.py  |
+  +--------------------------+           |          |  - anomaly_detection.py    |
                                          |          |  - risk_classification.py  |
                                          |          |  - explanation.py          |
                                          |          +--------------+-------------+
@@ -69,28 +66,157 @@ This agent implements industry-standard production reliability engineering patte
                                                     | - Scoped Detection Metrics |
                                                     | - Naive Baseline Comparison|
                                                     | - Efficiency Savings (%/s) |
-                                                    | - Visual Chart Artifact    |
+                                                    | - Visual Chart & Graph     |
                                                     +----------------------------+
 ```
 
 ---
 
-## 🔀 Dynamic Planning & Example Query Behaviors
+## Dynamic Planning & Query Behaviors
 
-| # | User Query | Intent | Tools Executed | Deliberately Skipped Tools | Rationale / Behavior |
+| # | User Query | Intent | Tools Executed | Deliberately Skipped Tools | Behavior |
 |---|---|---|---|---|---|
-| **1** | `"Analyse this dataset for suspicious activity"` | `broad_analysis` | `eda`, `feature_engineering`, `anomaly_detection`, `risk_classification`, `explanation` | *None* | Full end-to-end dataset profiling, ML anomaly scoring, risk scoring, explanations, and Naive FP reduction comparison. |
-| **2** | `"Find structuring patterns in the last 30 days"` | `pattern_detection` | `feature_engineering`, `anomaly_detection`, `risk_classification`, `explanation` | `eda` | Focuses on structuring indicators within 30-day window. Slices dataset rows. Skips exploratory data analysis. |
-| **3** | `"Which customers made 10+ transactions under $10,000?"` | `threshold_query` | `feature_engineering`, `risk_classification`, `explanation` | `eda`, `anomaly_detection` | Pure aggregation and threshold filtering (**NO ML scoring**). Skips EDA and IsolationForest anomaly detection. |
-| **4** | `"Is customer 4521 suspicious?"` | `single_entity` | `anomaly_detection`, `risk_classification`, `explanation` | `eda`, `feature_engineering` | Single-entity lookup for `customer_id: 4521`. Evaluates entity anomaly score and risk level without dataset-wide feature extraction. |
-| **5** | `"Show me customers who received large deposits then emptied their account within an hour"` | `pattern_detection` | `feature_engineering`, `anomaly_detection`, `risk_classification`, `explanation` | `eda` | Unscripted query testing generalization for rapid cash-out typology. |
-| **6** | `"check the data"` | `needs_clarification` | *None* | `eda`, `feature_engineering`, `anomaly_detection`, `risk_classification`, `explanation` | Ambiguous query. Halts tool execution and asks clarifying question. |
+| **1** | `"Analyse this dataset for suspicious activity"` | `broad_analysis` | `eda`, `feature_engineering`, `anomaly_detection`, `risk_classification`, `explanation` | *None* | Full 5-tool dataset profiling, ML anomaly scoring, risk scoring, explanations, and FP reduction metrics. |
+| **2** | `"Find structuring patterns in the last 30 days"` | `pattern_detection` | `feature_engineering`, `anomaly_detection`, `risk_classification`, `explanation` | `eda` | Focuses on structuring velocity within 30-day window. Slices dataset rows and skips EDA. |
+| **3** | `"Which customers made 10+ transactions under $10,000?"` | `threshold_query` | `feature_engineering`, `risk_classification`, `explanation` | `eda`, `anomaly_detection` | Pure threshold aggregation (**NO ML scoring**). Skips EDA and IsolationForest anomaly detection. |
+| **4** | `"Is customer 4521 suspicious?"` | `single_entity` | `anomaly_detection`, `risk_classification`, `explanation` | `eda`, `feature_engineering` | Single-entity lookup for Customer 4521. Evaluates entity anomaly score and risk level without dataset-wide EDA. |
+| **5** | `"Show me customers who received large deposits then emptied their account within an hour"` | `pattern_detection` | `feature_engineering`, `anomaly_detection`, `risk_classification`, `explanation` | `eda` | Detects rapid cash-out pattern and generates directed account money flow network graph. |
+| **6** | `"Is customer 99999 suspicious?"` | `customer_not_found` | *None* | `eda`, `feature_engineering`, `anomaly_detection`, `risk_classification`, `explanation` | Non-existent customer in database. Halts tool execution immediately (`0 tools run`) with warning banner. |
+| **7** | `"check the data"` | `needs_clarification` | *None* | `eda`, `feature_engineering`, `anomaly_detection`, `risk_classification`, `explanation` | Ambiguous query. Halts tool execution (`0 tools run`) and asks clarifying question. |
 
 ---
 
-## 📊 Dataset Schema & Synthetic Generation Logic
+## Step-by-Step Setup Guide for New Systems
 
-The project includes a synthetic dataset generator (`generate_data.py`) modeled after IBM AML synthetic transaction specifications (~5,000 rows CSV):
+Follow these steps to set up and run the project on any fresh system (Windows, macOS, or Linux).
+
+### Prerequisites
+- **Python**: Version 3.9, 3.10, 3.11, or 3.12
+- **Git**: Installed on your system
+
+---
+
+### Step 1: Clone the Repository
+
+```bash
+git clone https://github.com/Arvind007m/aml-suspicious-activity-agent.git
+cd aml-suspicious-activity-agent
+```
+
+---
+
+### Step 2: Create & Activate Virtual Environment
+
+#### On Windows (PowerShell or Command Prompt):
+```powershell
+python -m venv venv
+.\venv\Scripts\activate
+```
+
+#### On macOS / Linux:
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+---
+
+### Step 3: Install Dependencies
+
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+---
+
+### Step 4: Configure API Key (Optional)
+
+Create a `.env` file in the root directory (or copy from `.env.example`):
+
+```bash
+# On Linux/macOS:
+cp .env.example .env
+
+# On Windows (PowerShell):
+Copy-Item .env.example .env
+```
+
+Open `.env` and add your Groq API Key:
+
+```env
+GROQ_API_KEY=gsk_your_actual_groq_api_key_here
+```
+
+> **Note**: If `GROQ_API_KEY` is not provided, left as default, or rate-limited, the system **automatically engages the Local AI Engine**, allowing full offline execution without external API dependencies!
+
+---
+
+### Step 5: Generate Synthetic Dataset (Automated)
+
+Generate the IBM-spec AML transaction dataset (~5,000 records):
+
+```bash
+python generate_data.py
+```
+
+*(Note: The system will also automatically generate this dataset if missing when running any command).*
+
+---
+
+## Running the Application
+
+### Option A: Launch Interactive Streamlit Web App (Recommended)
+
+```bash
+streamlit run app.py
+```
+
+- Open your browser at `http://localhost:8501`.
+- Use the **Sample Query Selector** to test various pipeline capabilities or enter custom natural language queries.
+
+---
+
+### Option B: Run Command-Line Demo Suite
+
+```bash
+python run_demo.py
+```
+
+Runs the interactive terminal demo showing live reasoning traces, metric calculations, and tool savings across all canonical queries.
+
+---
+
+### Option C: Run Trace-Level Evaluation Suite
+
+```bash
+# Run via pytest
+pytest tests/ -v
+
+# OR run standalone eval script
+python tests/test_agent_eval.py
+```
+
+Verifies:
+- **6/6 Tool Selection Evals**: Asserts correct tool planning and skipping decisions.
+- **3/3 Detection Accuracy Evals**: Asserts ground-truth laundering entities (`3310`, `1089`, `4521`) are correctly caught.
+- **Scoring Determinism**: Asserts 100% identical risk scoring across repeated runs.
+
+---
+
+### Option D: Run Pipeline Stress Test
+
+```bash
+python run_stress_test.py
+```
+
+Runs 10 consecutive queries to verify pipeline stability, memory safety, and response consistency.
+
+---
+
+## Synthetic Dataset Schema
+
+Dataset located at `data/synthetic_transactions.csv` (~5,000 rows):
 
 | Column Name | Data Type | Description |
 |---|---|---|
@@ -106,44 +232,21 @@ The project includes a synthetic dataset generator (`generate_data.py`) modeled 
 
 ---
 
-## 💻 Tech Stack
+## Tech Stack
 
-- **Language**: Python 3.11+
-- **LLM Engine**: Groq API (`llama-3.3-70b-versatile`) via `groq` SDK
+- **Language**: Python 3.9+
+- **LLM Engine**: Groq API (`llama-3.3-70b-versatile`) with Local AI Engine Fallback
 - **Data & ML**: `pandas`, `numpy`, `scikit-learn` (`IsolationForest`)
+- **Network Topology**: `networkx`
 - **Visualization**: `matplotlib`
-- **User Interfaces**: CLI (`orchestrator.py`), Master Demo Runner (`run_demo.py`), Streamlit UI (`app.py`)
-- **Environment Management**: `python-dotenv`
+- **User Interfaces**: Streamlit Web UI (`app.py`), CLI Orchestrator (`orchestrator.py`)
+- **Testing**: `pytest`
 
 ---
 
-## 🚀 Setup & Running Instructions
+## AI Tools Disclosure
 
-```bash
-git clone https://github.com/Arvind007m/aml-suspicious-activity-agent.git
-cd aml-suspicious-activity-agent
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure GROQ_API_KEY in .env (Optional)
-cp .env.example .env
-
-# Generate dataset
-python generate_data.py
-
-# Run Master Hackathon Demo
-python run_demo.py
-
-# Run Interactive Streamlit UI
-streamlit run app.py
-```
-
----
-
-## 🤖 AI Tools Disclosure
-
-In compliance with hackathon regulations, this project disclaims the use of AI tools during development:
-- **Antigravity AI Agent** (Google DeepMind pair programmer) was used for initial architectural planning, skeleton code generation, and test suite verification.
-- **Gemini 3.6 Flash** model was utilized during interactive pair programming sessions.
-- **Groq API (`llama-3.3-70b-versatile`)** powers the runtime autonomous dynamic planner and explanation engine in the live application.
+In compliance with hackathon regulations:
+- **Antigravity AI Agent** (Google DeepMind pair programmer) was used for initial architectural planning, refactoring, and test suite verification.
+- **Groq API (`llama-3.3-70b-versatile`)** powers the cloud dynamic planner and explanation generator.
+- **Local AI Rule Engine** provides deterministic offline execution fallback when cloud APIs are unavailable.

@@ -201,7 +201,8 @@ def build_transaction_graph(df_raw: pd.DataFrame, top_entities: List[Dict[str, A
         # Outbound edges are identical -> Summarize with single annotation box near customer
         single_amt = outbound_amts[0]
         total_out = sum(outbound_amts)
-        summary_txt = f"⚡ {len(outbound_amts)} outbound transfers x ${single_amt:,.0f} = ${total_out:,.0f}"
+        summary_txt = f"{len(outbound_amts)} outbound transfers x ${single_amt:,.0f} = ${total_out:,.0f}"
+
 
         # Place summary box near target node on right side
         ax.text(

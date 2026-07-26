@@ -61,7 +61,7 @@ custom_query = st.text_input("Or Enter Custom Query:", value=selected_query)
 
 
 
-if st.button("🚀 Run Agent Analysis", type="primary"):
+if st.button("Run Agent Analysis", type="primary"):
     with st.spinner("Agent planning and executing tools..."):
         context = run_agent_query(custom_query)
         plan_meta = context["plan_meta"]
@@ -69,32 +69,32 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
         # --- Customer Not Found UI Banner ---
         if plan_meta.get("intent") == "customer_not_found":
             target_cust = plan_meta.get("entities", {}).get("customer_id")
-            st.warning(f"⚠️ **Customer {target_cust} Not Found**")
+            st.warning(f"**Customer {target_cust} Not Found**")
             st.info(f"Customer `{target_cust}` does not exist in the transaction database.")
             st.caption("The agent checked the database and halted all tool execution to save computing overhead.")
             
-            st.subheader("🧠 Agent Reasoning Trace")
+            st.subheader("Agent Reasoning Trace")
             for idx, step in enumerate(plan_meta.get("reasoning_trace", []), 1):
                 st.write(f"**Step {idx:02d}**: {step}")
 
         # --- LLM Unavailable UI Banner ---
         elif plan_meta.get("intent") == "llm_unavailable":
 
-            st.error("🛑 **LLM Unavailable**")
+            st.error("**LLM Unavailable**")
             st.info(f"**Status**: {plan_meta.get('reason')}")
             st.caption("The agent halted execution because the LLM API is unavailable (rate limit reached or missing API key). Rule engine fallback disabled.")
             
-            st.subheader("🧠 Agent Reasoning Trace")
+            st.subheader("Agent Reasoning Trace")
             for idx, step in enumerate(plan_meta.get("reasoning_trace", []), 1):
                 st.write(f"**Step {idx:02d}**: {step}")
 
         # --- Feature 3: Human-in-the-Loop Clarification UI ---
         elif plan_meta.get("intent") == "needs_clarification":
-            st.warning("❓ **Human-in-the-Loop Clarification Required**")
+            st.warning("**Human-in-the-Loop Clarification Required**")
             st.info(f"**Clarifying Question**: {plan_meta.get('clarifying_question')}")
             st.caption("The agent halted tool execution to save overhead because the query was too ambiguous.")
             
-            st.subheader("🧠 Agent Reasoning Trace")
+            st.subheader("Agent Reasoning Trace")
             for idx, step in enumerate(plan_meta.get("reasoning_trace", []), 1):
                 st.write(f"**Step {idx:02d}**: {step}")
 
@@ -115,7 +115,7 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
             total_flagged = len(explanations)
 
             # --- 1. Headline Metrics Row at Top (Fix 1) ---
-            st.subheader("📊 Execution Headline Metrics")
+            st.subheader("Execution Headline Metrics")
             m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
             
             m_col1.metric("Planner Source", plan_meta.get("planner_type", "LLM Planner").replace("Groq LLM (llama-3.3-70b-versatile)", "Groq LLM"))
@@ -137,7 +137,7 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
                 m_col5.metric("Execution Time", f"{exec_time:.2f}s")
 
             # --- 2. Clear Agent Decision Summary Panel (Fix 2) ---
-            st.markdown("### 📋 Agent Decision Summary")
+            st.markdown("### Agent Decision Summary")
             with st.container():
                 st.markdown(f"""
                 <div class="decision-box">
@@ -150,13 +150,13 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
                 """, unsafe_allow_html=True)
 
             # --- 3. Agent Execution Flow Visual Diagram ---
-            st.subheader("🌐 Agent Execution Flow")
+            st.subheader("Agent Execution Flow")
             res_summary_txt = f"{high_risk_cnt} High Risk Flagged" if high_risk_cnt > 0 else "Analysis Complete"
             flow_dot_code = build_flow_dot(plan_meta, result_summary=res_summary_txt)
             st.graphviz_chart(flow_dot_code)
 
             # --- 4. Compress & Color Reasoning Trace ---
-            st.subheader("🧠 Live Agent Reasoning Trace")
+            st.subheader("Live Agent Reasoning Trace")
 
             
             # Separate decision steps from verbose tool execution logs
@@ -172,11 +172,11 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
                     st.info(f"**Trace Step**: {step}")
 
             if log_steps:
-                with st.expander("🛠️ View Detailed Tool Execution Logs"):
+                with st.expander("View Detailed Tool Execution Logs"):
                     for log_s in log_steps:
                         st.code(log_s, language="bash")
 
-            with st.expander("📋 View Raw Agent Plan JSON"):
+            with st.expander("View Raw Agent Plan JSON"):
                 st.json({
                     "intent": plan_meta.get("intent"),
                     "filters": plan_meta.get("filters"),
@@ -194,11 +194,11 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
                 has_no_txns = True
 
             # --- 4. Grouped Requirements Output Section (Fix 4) ---
-            st.markdown("## 🎯 Agent Output (per requirements)")
+            st.markdown("## Agent Output (per requirements)")
 
             if has_no_txns:
                 no_txn_msg = explanations[0].get("explanation", "No transactions found for the specified customer.")
-                st.warning(f"ℹ️ **Entity Lookup Result**: {no_txn_msg}")
+                st.warning(f"**Entity Lookup Result**: {no_txn_msg}")
                 st.caption("No risk profile chart, suspicious entity table, or network graph generated because 0 matching transactions exist in the dataset.")
             else:
                 # --- 5. Detection Metrics Panel (Fix 5) ---
@@ -220,9 +220,9 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
                     p_col5.metric("Agent Impact", f"{fp_red_pct} FP Reduction", delta=f"{a_fp} agent FP")
 
                 elif metrics["scope"] == "single_entity":
-                    st.info(f"🎯 **Single Entity Lookup**: Customer **{metrics.get('target_customer')}** evaluated | Ground Truth: **{metrics.get('target_laundering_ground_truth')}** | Assigned Risk: **{metrics.get('target_risk_level')}**")
+                    st.info(f"**Single Entity Lookup**: Customer **{metrics.get('target_customer')}** evaluated | Ground Truth: **{metrics.get('target_laundering_ground_truth')}** | Assigned Risk: **{metrics.get('target_risk_level')}**")
                 else:
-                    st.info(f"🎯 **Query-Scoped Evaluation**: Precision **{metrics.get('precision')}** ({metrics.get('true_positives')} TP / {metrics.get('evaluated_customers')} Evaluated) | Hit Rate: **{metrics.get('hit_rate_pct')}%**")
+                    st.info(f"**Query-Scoped Evaluation**: Precision **{metrics.get('precision')}** ({metrics.get('true_positives')} TP / {metrics.get('evaluated_customers')} Evaluated) | Hit Rate: **{metrics.get('hit_rate_pct')}%**")
 
                 # --- 6. Top Suspicious Entities Table (Fix 6: Highlighting & Text Wrapping) ---
                 st.markdown("### 2. Top Suspicious Entities & Evidence Explanations")
@@ -270,13 +270,14 @@ if st.button("🚀 Run Agent Analysis", type="primary"):
                 col_chart, col_net = st.columns(2)
                 with col_chart:
                     if os.path.exists(latest_chart):
-                        st.subheader("📊 Risk Profile Chart")
+                        st.subheader("Risk Profile Chart")
                         st.image(latest_chart, use_container_width=True)
 
                 with col_net:
                     if os.path.exists(latest_network):
-                        st.subheader("🌐 Transaction Network Topology")
+                        st.subheader("Transaction Network Topology")
                         st.image(latest_network, use_container_width=True)
                     else:
                         st.info("No transaction network graph generated for this query.")
+
 
