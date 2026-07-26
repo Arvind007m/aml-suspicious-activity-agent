@@ -26,13 +26,23 @@ def save_supporting_chart(context: Dict[str, Any], output_dir: str = "charts") -
     os.makedirs(output_dir, exist_ok=True)
     top_entities = context.get("explanations", context.get("top_suspicious_entities", []))
     
-    # Fix 9: Gracefully skip chart generation if results are empty
+    # Gracefully skip chart generation if results are empty or entity has 0 transactions
     if not top_entities or len(top_entities) == 0:
+        return ""
+
+    latest_chart_path = os.path.join(output_dir, "latest_analysis.png")
+    if top_entities[0].get("txn_count_total", 0) == 0 or "No transactions found" in str(top_entities[0].get("explanation", "")):
+        if os.path.exists(latest_chart_path):
+            try:
+                os.remove(latest_chart_path)
+            except Exception:
+                pass
         return ""
 
     df_top = pd.DataFrame(top_entities).head(8)
     if "customer_id" not in df_top.columns or "risk_score" not in df_top.columns:
         return ""
+
 
     plt.figure(figsize=(10, 5))
     colors = []
@@ -287,9 +297,54 @@ def run_agent_query(query: str, csv_path: str = "data/transactions.csv") -> Dict
         
         # 1. Planner parses query into structured JSON plan
         plan_meta = create_plan(query)
-        
-        # COMPOUNDING ERROR GUARDRAIL: Planner enforces a maximum tool execution cap (<=5 tools)
-        # and canonical plan mapping per intent to prevent compounding errors across multi-step chains.
+
+        # Dynamic Non-Existent Customer Check (No hardcoding): Halt tool execution if customer ID is not in DB
+        if plan_meta.get("intent") == "single_entity":
+            target_cust = str(plan_meta.get("entities", {}).get("customer_id") or "").strip()
+            if target_cust:
+                existing_custs = set(df["customer_id"].astype(str).unique())
+                if target_cust not in existing_custs:
+                    plan_meta = {
+                        "planner_type": plan_meta.get("planner_type", "Supervisor Planner"),
+                        "intent": "customer_not_found",
+                        "entities": {"customer_id": target_cust},
+                        "filters": plan_meta.get("filters"),
+                        "aml_pattern": None,
+                        "plan": [],
+                        "skipped": ["eda", "feature_engineering", "anomaly_detection", "risk_classification", "explanation"],
+                        "reason": f"Customer {target_cust} does not exist in the transaction database. Assessment halted.",
+                        "reasoning_trace": [
+                            f"Parsed query -> intent: single_entity",
+                            f"Detected entity constraint: customer_id = {target_cust}",
+                            f"Database lookup -> Customer {target_cust} NOT FOUND in dataset",
+                            f"Decision: HALT execution — no transactions exist for Customer {target_cust} (skipped all 5 tools to save overhead)"
+                        ]
+                    }
+
+        # Check for customer not found halt
+        if plan_meta.get("intent") == "customer_not_found":
+            context = {
+                "query": query,
+                "df": df,
+                "plan_meta": plan_meta,
+                "executed_tools": [],
+                "explanations": [],
+                "reasoning_trace": plan_meta.get("reasoning_trace", []),
+                "execution_time_sec": time.time() - start_time
+            }
+            target_cust = plan_meta.get("entities", {}).get("customer_id")
+            print("\n" + "="*70)
+            print("          [!] CUSTOMER NOT FOUND IN DATABASE — HALTED          ")
+            print("="*70)
+            print(f"QUERY:                 \"{query}\"")
+            print(f"CUSTOMER ID:           {target_cust}")
+            print(f"REASON:                {plan_meta.get('reason')}")
+            print("REASONING TRACE:")
+            for idx, step in enumerate(context["reasoning_trace"], 1):
+                print(f"  Step {idx:02d}: {step}")
+            print("="*70 + "\n")
+            return context
+
 
         
         # Check for LLM unavailable halt

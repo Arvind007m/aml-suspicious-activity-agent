@@ -26,11 +26,21 @@ def build_transaction_graph(df_raw: pd.DataFrame, top_entities: List[Dict[str, A
         return ""
 
     os.makedirs("charts", exist_ok=True)
+    latest_net_path = os.path.join("charts", "latest_network.png")
     
     # 1. Primary target flagged entity
     target_item = top_entities[0]
     target_cust = str(target_item.get("customer_id")).strip()
     
+    # Do not generate graph for entities with 0 transactions or non-existent customers
+    if target_item.get("txn_count_total", 0) == 0 or "No transactions found" in str(target_item.get("explanation", "")):
+        if os.path.exists(latest_net_path):
+            try:
+                os.remove(latest_net_path)
+            except Exception:
+                pass
+        return ""
+
     df = df_raw.copy()
     df["customer_id"] = df["customer_id"].astype(str)
     df["sender_account"] = df["sender_account"].astype(str)
@@ -44,10 +54,16 @@ def build_transaction_graph(df_raw: pd.DataFrame, top_entities: List[Dict[str, A
     ].copy()
 
     if cust_txns.empty:
-        cust_txns = df.sort_values("amount", ascending=False).head(20).copy()
+        if os.path.exists(latest_net_path):
+            try:
+                os.remove(latest_net_path)
+            except Exception:
+                pass
+        return ""
 
     if len(cust_txns) > 20:
         cust_txns = cust_txns.sort_values("amount", ascending=False).head(20).copy()
+
 
     # 2. Build Directed Graph
     G = nx.DiGraph()

@@ -94,9 +94,9 @@ def _enforce_canonical_plan(parsed: Dict[str, Any]) -> Dict[str, Any]:
         parsed["plan"] = list(CANONICAL_PLANS[intent]["plan"])
         parsed["skipped"] = list(CANONICAL_PLANS[intent]["skipped"])
     else:
-        parsed["intent"] = "broad_analysis"
-        parsed["plan"] = list(CANONICAL_PLANS["broad_analysis"]["plan"])
-        parsed["skipped"] = list(CANONICAL_PLANS["broad_analysis"]["skipped"])
+        parsed["plan"] = []
+        parsed["skipped"] = ["eda", "feature_engineering", "anomaly_detection", "risk_classification", "explanation"]
+
         
     trace = [
         f"Parsed query -> intent: {parsed['intent']}",
@@ -268,16 +268,36 @@ def _rule_based_fallback_planner(query: str, reason_prefix: str = "Fallback Rule
         return _enforce_canonical_plan(res)
 
 
-    # Query 1 / Default: Broad Analysis / Top riskiest customers
-    res = {
+    # Broad Analysis / Top riskiest customers query
+    if any(k in q_lower for k in ["analyse", "analyze", "broad", "dataset", "suspicious activity", "overview", "full"]):
+        res = {
+            "planner_type": f"{reason_prefix} (Rule-Engine)",
+            "intent": "broad_analysis",
+            "entities": {"customer_id": None},
+            "filters": {"date_range_days": None, "min_amount": None, "max_amount": None, "min_txn_count": None},
+            "aml_pattern": None,
+            "reason": "Broad dataset analysis query. Running full suite including EDA, feature engineering, ML anomaly detection, and risk explanation."
+        }
+        return _enforce_canonical_plan(res)
+
+    # Unrecognized query -> Route to existing Human-in-the-Loop Clarification
+    return {
         "planner_type": f"{reason_prefix} (Rule-Engine)",
-        "intent": "broad_analysis",
+        "intent": "needs_clarification",
         "entities": {"customer_id": None},
         "filters": {"date_range_days": None, "min_amount": None, "max_amount": None, "min_txn_count": None},
         "aml_pattern": None,
-        "reason": "Broad dataset analysis query. Running full suite including EDA, feature engineering, ML anomaly detection, and risk explanation."
+        "plan": [],
+        "skipped": ["eda", "feature_engineering", "anomaly_detection", "risk_classification", "explanation"],
+        "reason": "Query intent could not be determined. Requesting human clarification before running analysis.",
+        "clarifying_question": f"Could not determine analysis intent for '{query}'. Did you want a full dataset analysis, a specific customer lookup (e.g. Customer 4521), or structuring pattern detection?",
+        "reasoning_trace": [
+            f"Parsed query -> '{query}'",
+            "Intent match check -> UNRECOGNIZED QUERY INTENT",
+            "Decision: HALT execution & request human clarification (prevent unnecessary tool overhead)"
+        ]
     }
-    return _enforce_canonical_plan(res)
+
 
 
 

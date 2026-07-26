@@ -78,6 +78,16 @@ def test_scoring_determinism():
     assert scores_run2 == scores_run3
 
 
+def test_non_existent_customer_handling():
+    """Asserts that querying a non-existent customer (e.g. 99999) halts tool execution without running tools."""
+    ctx = run_agent_query("Is customer 99999 suspicious?")
+    plan_meta = ctx.get("plan_meta", {})
+    assert plan_meta.get("intent") == "customer_not_found"
+    assert ctx.get("executed_tools") == []
+    assert len(ctx.get("explanations", [])) == 0
+
+
+
 def run_standalone_eval():
     """Standalone runner for plain python tests/test_agent_eval.py execution."""
     print("\n" + "="*70)
