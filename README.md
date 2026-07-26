@@ -33,6 +33,7 @@ Unlike traditional fixed sequential pipelines, this system is a **true autonomou
 ## System Architecture
 
 ```mermaid
+%%{init: {'theme': 'dark', 'flowchart': {'curve': 'ortho'}}}%%
 graph TD
     UserQuery["Natural Language User Query"]
     
@@ -44,25 +45,25 @@ graph TD
     EarlyExit["Human-in-the-Loop & Safety Intercept<br/>(Halts tool execution cleanly)"]
     
     subgraph ToolPipeline ["Validated Tool Harness (registry.py)"]
-        EDA["1. Exploratory Data Analysis<br/>(eda.py)"]
-        FE["2. Feature Engineering<br/>(feature_engineering.py)"]
-        Anomaly["3. ML Anomaly Detection<br/>(anomaly_detection.py)"]
-        Risk["4. Risk Classification<br/>(risk_classification.py)"]
-        Explain["5. Evidence Explanations<br/>(explanation.py)"]
+        EDA["1. Exploratory Data Analysis (eda.py)"]
+        FE["2. Feature Engineering (feature_engineering.py)"]
+        Anomaly["3. ML Anomaly Detection (anomaly_detection.py)"]
+        Risk["4. Risk Classification (risk_classification.py)"]
+        Explain["5. Evidence Explanations (explanation.py)"]
     end
     
     subgraph Deliverables ["Orchestrator Deliverables (orchestrator.py & app.py)"]
         Metrics["Precision & FP Reduction Benchmarks"]
         GraphViz["Directed Money Flow Network Topology"]
         Trace["Live Narrated Reasoning Trace & Tool Savings"]
-        SAR["FinCEN SAR Narrative Package<br/>(sar_generator.py)"]
+        SAR["FinCEN SAR Narrative Package (sar_generator.py)"]
     end
 
     UserQuery --> GroqLLM
     GroqLLM -->|"Offline / Missing Key"| LocalAI
     
-    GroqLLM -->|"Vague Query / Non-Existent Customer"| EarlyExit
-    LocalAI -->|"Vague Query / Non-Existent Customer"| EarlyExit
+    GroqLLM -->|"Vague Query / Unknown Entity"| EarlyExit
+    LocalAI -->|"Vague Query / Unknown Entity"| EarlyExit
     
     GroqLLM -->|"Selective Tool Plan"| ToolPipeline
     LocalAI -->|"Selective Tool Plan"| ToolPipeline
@@ -74,6 +75,7 @@ graph TD
     
     ToolPipeline --> Deliverables
 ```
+
 
 
 ---
