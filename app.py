@@ -282,14 +282,16 @@ with tab2:
         st.info("Run an analysis query in Tab 1 ('Interactive Agent Demo') to generate regulatory SAR reports for flagged entities.")
     else:
         exps = context.get("explanations", [])
-        valid_exps = [e for e in exps if e.get("customer_id") and e.get("txn_count_total", 1) > 0]
-        if not valid_exps:
-            st.warning("No flagged entities with transactions available for SAR generation.")
+        # SAR filings are legally reserved ONLY for High & Medium risk flagged entities
+        flagged_exps = [e for e in exps if e.get("customer_id") and e.get("risk_level") in ["High", "Medium"] and e.get("txn_count_total", 1) > 0]
+        if not flagged_exps:
+            st.info("ℹ️ **No SAR Filing Required**: All evaluated entities for this query are categorized as **Low Risk** (Good Customers) requiring Routine Monitoring only. FinCEN regulations reserve SAR filings strictly for elevated/suspicious risk entities.")
         else:
-            cust_options = [f"Customer {e['customer_id']} (Risk: {e.get('risk_level', 'Low')}, Score: {e.get('risk_score', 0.0):.1f})" for e in valid_exps]
+            cust_options = [f"Customer {e['customer_id']} (Risk: {e.get('risk_level', 'Low')}, Score: {e.get('risk_score', 0.0):.1f})" for e in flagged_exps]
             selected_idx = st.selectbox("Select Flagged Subject Entity for SAR Filing:", range(len(cust_options)), format_func=lambda i: cust_options[i])
             
-            selected_entity = valid_exps[selected_idx]
+            selected_entity = flagged_exps[selected_idx]
+
             sar_text = generate_sar_narrative(selected_entity, query=context.get("query", ""))
             
             st.subheader("FinCEN SAR Narrative Draft")
