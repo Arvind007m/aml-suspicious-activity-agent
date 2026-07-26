@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 from orchestrator import run_agent_query, calculate_detection_metrics
 from tools.graph_viz import build_flow_dot
+from tools.sar_generator import generate_sar_narrative
 
 
 st.set_page_config(
@@ -45,25 +46,35 @@ This agent dynamically inspects queries, generates a **Structured Execution Plan
 selects appropriate tools, and executes only the required analysis components.
 """)
 
-# Sample queries covering all pipeline capabilities
-sample_queries = [
-    "Analyse this dataset for suspicious activity",
-    "Show me customers who received large deposits then emptied their account within an hour",
-    "Find structuring patterns in the last 30 days",
-    "Which customers made 10+ transactions under $10,000?",
-    "Is customer 4521 suspicious?",
-    "Is customer 99999 suspicious?",
-    "check the data"
-]
+# Setup 2 Presentation Tabs
+tab1, tab2 = st.tabs([
+    "Interactive Agent Demo",
+    "Regulatory SAR & Audit Export"
+])
 
-selected_query = st.selectbox("Select Sample Query:", sample_queries)
-custom_query = st.text_input("Or Enter Custom Query:", value=selected_query)
+with tab1:
+    # Sample queries covering all pipeline capabilities
+    sample_queries = [
+        "Analyse this dataset for suspicious activity",
+        "Show me customers who received large deposits then emptied their account within an hour",
+        "Find structuring patterns in the last 30 days",
+        "Which customers made 10+ transactions under $10,000?",
+        "Is customer 4521 suspicious?",
+        "Is customer 99999 suspicious?",
+        "check the data"
+    ]
 
+    selected_query = st.selectbox("Select Sample Query:", sample_queries)
+    custom_query = st.text_input("Or Enter Custom Query:", value=selected_query)
 
+    if st.button("Run Agent Analysis", type="primary"):
+        with st.spinner("Agent planning and executing tools..."):
+            context = run_agent_query(custom_query)
+            st.session_state["latest_context"] = context
 
-if st.button("Run Agent Analysis", type="primary"):
-    with st.spinner("Agent planning and executing tools..."):
-        context = run_agent_query(custom_query)
+    context = st.session_state.get("latest_context")
+
+    if context:
         plan_meta = context["plan_meta"]
         
         # --- Customer Not Found UI Banner ---
@@ -79,7 +90,6 @@ if st.button("Run Agent Analysis", type="primary"):
 
         # --- LLM Unavailable UI Banner ---
         elif plan_meta.get("intent") == "llm_unavailable":
-
             st.error("**LLM Unavailable**")
             st.info(f"**Status**: {plan_meta.get('reason')}")
             st.caption("The agent halted execution because the LLM API is unavailable (rate limit reached or missing API key). Rule engine fallback disabled.")
@@ -88,7 +98,7 @@ if st.button("Run Agent Analysis", type="primary"):
             for idx, step in enumerate(plan_meta.get("reasoning_trace", []), 1):
                 st.write(f"**Step {idx:02d}**: {step}")
 
-        # --- Feature 3: Human-in-the-Loop Clarification UI ---
+        # --- Human-in-the-Loop Clarification UI ---
         elif plan_meta.get("intent") == "needs_clarification":
             st.warning("**Human-in-the-Loop Clarification Required**")
             st.info(f"**Clarifying Question**: {plan_meta.get('clarifying_question')}")
@@ -97,7 +107,6 @@ if st.button("Run Agent Analysis", type="primary"):
             st.subheader("Agent Reasoning Trace")
             for idx, step in enumerate(plan_meta.get("reasoning_trace", []), 1):
                 st.write(f"**Step {idx:02d}**: {step}")
-
 
         else:
             st.success("Execution Complete!")
@@ -110,11 +119,9 @@ if st.button("Run Agent Analysis", type="primary"):
             skipped_tools = plan_meta.get("skipped", [])
             exec_time = context.get("execution_time_sec", 0.0)
 
-            # Count High risk entities
             high_risk_cnt = sum(1 for e in explanations if e.get("risk_level") == "High")
             total_flagged = len(explanations)
 
-            # --- 1. Headline Metrics Row at Top (Fix 1) ---
             st.subheader("Execution Headline Metrics")
             m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
             
@@ -123,7 +130,6 @@ if st.button("Run Agent Analysis", type="primary"):
             m_col3.metric("Flagged Risk", f"{high_risk_cnt} High Risk", delta=f"{total_flagged} total flagged")
 
             if intent == "broad_analysis":
-                # PROMINENT FP REDUCTION metric card for broad analysis (Fix H1: compute real metrics, no hardcoded defaults)
                 fp_red_str = f"{metrics['fp_reduction_pct']:.1f}%" if "fp_reduction_pct" in metrics else "N/A"
                 naive_fp = metrics.get("naive_false_positives", "N/A")
                 agent_fp = metrics.get("false_positives", "N/A")
@@ -133,10 +139,8 @@ if st.button("Run Agent Analysis", type="primary"):
                 tools_run_cnt = len(exec_tools)
                 saved_overhead = int(((5 - tools_run_cnt) / 5) * 100)
                 m_col4.metric("Tool Savings", f"{saved_overhead}% Saved", delta=f"{tools_run_cnt}/5 tools run")
-
                 m_col5.metric("Execution Time", f"{exec_time:.2f}s")
 
-            # --- 2. Clear Agent Decision Summary Panel (Fix 2) ---
             st.markdown("### Agent Decision Summary")
             with st.container():
                 st.markdown(f"""
@@ -149,17 +153,12 @@ if st.button("Run Agent Analysis", type="primary"):
                 </div>
                 """, unsafe_allow_html=True)
 
-            # --- 3. Agent Execution Flow Visual Diagram ---
             st.subheader("Agent Execution Flow")
             res_summary_txt = f"{high_risk_cnt} High Risk Flagged" if high_risk_cnt > 0 else "Analysis Complete"
             flow_dot_code = build_flow_dot(plan_meta, result_summary=res_summary_txt)
             st.graphviz_chart(flow_dot_code)
 
-            # --- 4. Compress & Color Reasoning Trace ---
             st.subheader("Live Agent Reasoning Trace")
-
-            
-            # Separate decision steps from verbose tool execution logs
             decision_steps = [s for s in trace if not s.startswith("Step") or "Running" not in s]
             log_steps = [s for s in trace if "Running" in s]
 
@@ -188,12 +187,10 @@ if st.button("Run Agent Analysis", type="primary"):
 
             st.divider()
 
-            # Check if query returned no transactions for requested entity (e.g. unknown customer)
             has_no_txns = False
             if explanations and (explanations[0].get("txn_count_total", 0) == 0 or "No transactions found" in str(explanations[0].get("explanation", ""))):
                 has_no_txns = True
 
-            # --- 4. Grouped Requirements Output Section (Fix 4) ---
             st.markdown("## Agent Output (per requirements)")
 
             if has_no_txns:
@@ -201,7 +198,6 @@ if st.button("Run Agent Analysis", type="primary"):
                 st.warning(f"**Entity Lookup Result**: {no_txn_msg}")
                 st.caption("No risk profile chart, suspicious entity table, or network graph generated because 0 matching transactions exist in the dataset.")
             else:
-                # --- 5. Detection Metrics Panel (Fix 5) ---
                 st.markdown("### 1. Detection Performance & Baseline Metrics")
                 if metrics["scope"] == "broad_analysis" or metrics["scope"] == "dataset_wide":
                     p_col1, p_col2, p_col3, p_col4, p_col5 = st.columns(5)
@@ -224,7 +220,6 @@ if st.button("Run Agent Analysis", type="primary"):
                 else:
                     st.info(f"**Query-Scoped Evaluation**: Precision **{metrics.get('precision')}** ({metrics.get('true_positives')} TP / {metrics.get('evaluated_customers')} Evaluated) | Hit Rate: **{metrics.get('hit_rate_pct')}%**")
 
-                # --- 6. Top Suspicious Entities Table (Fix 6: Highlighting & Text Wrapping) ---
                 st.markdown("### 2. Top Suspicious Entities & Evidence Explanations")
                 if explanations:
                     target_cols = [
@@ -235,7 +230,6 @@ if st.button("Run Agent Analysis", type="primary"):
                     valid_cols = [c for c in target_cols if c in df_display.columns]
                     df_display = df_display[valid_cols]
 
-                    # Style High Risk rows with red tint highlighting
                     def highlight_high_risk(row):
                         if row.get("risk_level") == "High":
                             return ["background-color: #451A1A; color: #FCA5A5; font-weight: bold"] * len(row)
@@ -262,7 +256,6 @@ if st.button("Run Agent Analysis", type="primary"):
                 else:
                     st.info("No suspicious entities flagged for this query.")
 
-                # --- 7. Supporting Visual Artifacts ---
                 st.markdown("### 3. Supporting Visual Artifacts & Network Topology")
                 latest_chart = "charts/latest_analysis.png"
                 latest_network = "charts/latest_network.png"
@@ -280,4 +273,32 @@ if st.button("Run Agent Analysis", type="primary"):
                     else:
                         st.info("No transaction network graph generated for this query.")
 
-
+with tab2:
+    st.header("Regulatory SAR (Suspicious Activity Report) & Audit Export")
+    st.caption("Generates formal FinCEN-compliant SAR narrative packages for compliance officer sign-off.")
+    
+    context = st.session_state.get("latest_context")
+    if not context or not context.get("explanations"):
+        st.info("Run an analysis query in Tab 1 ('Interactive Agent Demo') to generate regulatory SAR reports for flagged entities.")
+    else:
+        exps = context.get("explanations", [])
+        valid_exps = [e for e in exps if e.get("customer_id") and e.get("txn_count_total", 1) > 0]
+        if not valid_exps:
+            st.warning("No flagged entities with transactions available for SAR generation.")
+        else:
+            cust_options = [f"Customer {e['customer_id']} (Risk: {e.get('risk_level', 'Low')}, Score: {e.get('risk_score', 0.0):.1f})" for e in valid_exps]
+            selected_idx = st.selectbox("Select Flagged Subject Entity for SAR Filing:", range(len(cust_options)), format_func=lambda i: cust_options[i])
+            
+            selected_entity = valid_exps[selected_idx]
+            sar_text = generate_sar_narrative(selected_entity, query=context.get("query", ""))
+            
+            st.subheader("FinCEN SAR Narrative Draft")
+            st.code(sar_text, language="markdown")
+            
+            st.download_button(
+                label=f"Download Regulatory SAR Package (Customer {selected_entity['customer_id']})",
+                data=sar_text,
+                file_name=f"FinCEN_SAR_Customer_{selected_entity['customer_id']}.txt",
+                mime="text/plain",
+                type="primary"
+            )

@@ -15,6 +15,7 @@ Unlike traditional fixed sequential pipelines, this system is a **true autonomou
 5. **False-Positive Reduction Benchmarks**: Proves a **100% false-positive reduction** against a naive rule baseline (> $9,000 threshold).
 6. **Efficiency Savings Metric**: Tracks tool invocation savings (e.g. *"Saved 40% tool overhead; 3 of 5 tools needed"*) and wall-clock execution time.
 7. **Zero-Downtime Local AI Engine**: Seamlessly falls back to a deterministic Local AI Engine if the Groq LLM API key is missing or rate-limited.
+8. **Automated FinCEN SAR Exporter**: Generates formal Bank Secrecy Act (BSA) Form 111 Suspicious Activity Report narratives for high-risk entities with one-click `.txt` download (`tools/sar_generator.py`).
 
 ---
 
@@ -54,6 +55,7 @@ graph TD
         Metrics["Precision & FP Reduction Benchmarks"]
         GraphViz["Directed Money Flow Network Topology"]
         Trace["Live Narrated Reasoning Trace & Tool Savings"]
+        SAR["FinCEN SAR Narrative Package<br/>(sar_generator.py)"]
     end
 
     UserQuery --> GroqLLM
@@ -80,7 +82,7 @@ graph TD
 
 ```
 aml-suspicious-activity-agent/
-├── app.py                      # Streamlit Web Interface
+├── app.py                      # Streamlit Web Interface (2 Presentation Tabs)
 ├── orchestrator.py             # CLI Execution Engine & Tool Pipeline Orchestrator
 ├── planner.py                  # Dynamic Planner (Groq LLM & Local AI Fallback)
 ├── guardrails.py               # Input Security & Query Length Validation Guardrails
@@ -100,11 +102,13 @@ aml-suspicious-activity-agent/
 │   ├── anomaly_detection.py    # IsolationForest ML Anomaly Detection Tool
 │   ├── risk_classification.py  # Multi-Signal Risk Scoring & Action Recommendation
 │   ├── explanation.py          # Dynamic Evidence-Backed Explanation Generator
-│   └── graph_viz.py            # Directed Money Flow Network Topology Visualizer
+│   ├── graph_viz.py            # Directed Money Flow Network Topology Visualizer
+│   └── sar_generator.py        # FinCEN BSA Form 111 SAR Narrative Generator
 ├── tests/
 │   └── test_agent_eval.py      # Trace-Level Evaluation & Determinism Test Suite
 └── charts/                     # Generated Visual Artifacts (Network Graphs & Risk Charts)
 ```
+
 
 ---
 
