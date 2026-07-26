@@ -35,16 +35,12 @@ Unlike traditional fixed sequential pipelines, this system is a **true autonomou
 graph TD
     UserQuery["Natural Language User Query"]
     
-    subgraph Planner ["Supervisor Planner & Intent Engine (planner.py)"]
-        GuardCheck{"Input Guardrail & Entity Check"}
-        GroqLLM["Groq LLM Dynamic Planner<br/>(llama-3.3-70b-versatile)"]
-        LocalAI["Deterministic Local AI Engine<br/>(Offline / Rate-Limit Fallback)"]
+    subgraph Planner ["Supervisor Dynamic Planner (planner.py)"]
+        GroqLLM["Groq LLM Planner<br/>(llama-3.3-70b-versatile)"]
+        LocalAI["Local AI Engine<br/>(Offline Fallback)"]
     end
     
-    subgraph ControlGuards ["Control Flow Intercepts"]
-        Clarify["Human-in-the-Loop Clarification<br/>(Halts tool execution)"]
-        CustNotFound["Customer Not Found Alert<br/>(Halts with 0 tools run)"]
-    end
+    EarlyExit["Human-in-the-Loop & Safety Intercept<br/>(Halts tool execution cleanly)"]
     
     subgraph ToolPipeline ["Validated Tool Harness (registry.py)"]
         EDA["1. Exploratory Data Analysis<br/>(eda.py)"]
@@ -55,20 +51,19 @@ graph TD
     end
     
     subgraph Deliverables ["Orchestrator Deliverables (orchestrator.py & app.py)"]
-        Metrics["Precision / Recall Benchmarks &<br/>100% False Positive Reduction"]
-        GraphViz["Directed Money Flow Network Topology<br/>(graph_viz.py)"]
-        Trace["Live Narrated Reasoning Trace &<br/>Tool Savings Metric (% / sec)"]
+        Metrics["Precision & FP Reduction Benchmarks"]
+        GraphViz["Directed Money Flow Network Topology"]
+        Trace["Live Narrated Reasoning Trace & Tool Savings"]
     end
 
-    UserQuery --> GuardCheck
-    GuardCheck -->|"Clear Search Query"| GroqLLM
-    GroqLLM -->|"API Error / Missing Key"| LocalAI
+    UserQuery --> GroqLLM
+    GroqLLM -->|"Offline / Missing Key"| LocalAI
     
-    GuardCheck -->|"Ambiguous Query"| Clarify
-    GuardCheck -->|"Unknown Entity ID"| CustNotFound
+    GroqLLM -->|"Vague Query / Non-Existent Customer"| EarlyExit
+    LocalAI -->|"Vague Query / Non-Existent Customer"| EarlyExit
     
-    GroqLLM -->|"Dynamic Tool Plan"| ToolPipeline
-    LocalAI -->|"Dynamic Tool Plan"| ToolPipeline
+    GroqLLM -->|"Selective Tool Plan"| ToolPipeline
+    LocalAI -->|"Selective Tool Plan"| ToolPipeline
     
     EDA --> FE
     FE --> Anomaly
@@ -77,6 +72,7 @@ graph TD
     
     ToolPipeline --> Deliverables
 ```
+
 
 ---
 
