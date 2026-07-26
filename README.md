@@ -31,46 +31,87 @@ Unlike traditional fixed sequential pipelines, this system is a **true autonomou
 
 ## System Architecture
 
-```
-                       +-----------------------------------+
-                       |        Natural Language Query     |
-                       +-----------------+-----------------+
-                                         |
-                                         v
-                       +-----------------------------------+
-                       |       planner.py (Groq LLM /      |
-                       |          Local AI Engine)         |
-                       | - Detects Intent / Clarification  |
-                       | - Generates Live Reasoning Trace  |
-                       | - Maps to Canonical Plan          |
-                       +-----------------+-----------------+
-                                         |
-               +-------------------------+-------------------------+
-               | (If needs_clarification |                         | (If clear query)
-               |  or customer_not_found) |                         v
-               v                         |          +----------------------------+
-  +--------------------------+           |          |  registry.py Tool Pipeline |
-  | Prompts User / Halts     |           |          |  - eda.py                  |
-  | Tool Execution (0 Tools) |           |          |  - feature_engineering.py  |
-  +--------------------------+           |          |  - anomaly_detection.py    |
-                                         |          |  - risk_classification.py  |
-                                         |          |  - explanation.py          |
-                                         |          +--------------+-------------+
-                                         |                         |
-                                         +-------------------------+
-                                                                   |
-                                                                   v
-                                                    +----------------------------+
-                                                    |       orchestrator.py      |
-                                                    | - Live Reasoning Trace     |
-                                                    | - Scoped Detection Metrics |
-                                                    | - Naive Baseline Comparison|
-                                                    | - Efficiency Savings (%/s) |
-                                                    | - Visual Chart & Graph     |
-                                                    +----------------------------+
+```mermaid
+graph TD
+    UserQuery["Natural Language User Query"]
+    
+    subgraph Planner ["Supervisor Planner & Intent Engine (planner.py)"]
+        GuardCheck{"Input Guardrail & Entity Check"}
+        GroqLLM["Groq LLM Dynamic Planner<br/>(llama-3.3-70b-versatile)"]
+        LocalAI["Deterministic Local AI Engine<br/>(Offline / Rate-Limit Fallback)"]
+    end
+    
+    subgraph ControlGuards ["Control Flow Intercepts"]
+        Clarify["Human-in-the-Loop Clarification<br/>(Halts tool execution)"]
+        CustNotFound["Customer Not Found Alert<br/>(Halts with 0 tools run)"]
+    end
+    
+    subgraph ToolPipeline ["Validated Tool Harness (registry.py)"]
+        EDA["1. Exploratory Data Analysis<br/>(eda.py)"]
+        FE["2. Feature Engineering<br/>(feature_engineering.py)"]
+        Anomaly["3. ML Anomaly Detection<br/>(anomaly_detection.py)"]
+        Risk["4. Risk Classification<br/>(risk_classification.py)"]
+        Explain["5. Evidence Explanations<br/>(explanation.py)"]
+    end
+    
+    subgraph Deliverables ["Orchestrator Deliverables (orchestrator.py & app.py)"]
+        Metrics["Precision / Recall Benchmarks &<br/>100% False Positive Reduction"]
+        GraphViz["Directed Money Flow Network Topology<br/>(graph_viz.py)"]
+        Trace["Live Narrated Reasoning Trace &<br/>Tool Savings Metric (% / sec)"]
+    end
+
+    UserQuery --> GuardCheck
+    GuardCheck -->|"Clear Search Query"| GroqLLM
+    GroqLLM -->|"API Error / Missing Key"| LocalAI
+    
+    GuardCheck -->|"Ambiguous Query"| Clarify
+    GuardCheck -->|"Unknown Entity ID"| CustNotFound
+    
+    GroqLLM -->|"Dynamic Tool Plan"| ToolPipeline
+    LocalAI -->|"Dynamic Tool Plan"| ToolPipeline
+    
+    EDA --> FE
+    FE --> Anomaly
+    Anomaly --> Risk
+    Risk --> Explain
+    
+    ToolPipeline --> Deliverables
 ```
 
 ---
+
+## Directory Structure
+
+```
+aml-suspicious-activity-agent/
+├── app.py                      # Streamlit Web Interface
+├── orchestrator.py             # CLI Execution Engine & Tool Pipeline Orchestrator
+├── planner.py                  # Dynamic Planner (Groq LLM & Local AI Fallback)
+├── guardrails.py               # Input Security & Query Length Validation Guardrails
+├── registry.py                 # Tool Harness Registry & Validation Engine
+├── config.py                   # Centralized Thresholds & Domain Constants
+├── generate_data.py            # IBM-spec Synthetic Transaction Data Generator
+├── run_demo.py                 # Master Terminal Hackathon Demo Suite
+├── run_stress_test.py          # Pipeline Stability & Memory Stress Test
+├── requirements.txt            # Python Dependencies Manifest
+├── .env.example                # Environment Configuration Template
+├── README.md                   # Project Documentation & Setup Guide
+├── data/
+│   └── synthetic_transactions.csv  # Transaction Dataset (~5,000 records)
+├── tools/
+│   ├── eda.py                  # Exploratory Data Analysis & Dataset Profiling Tool
+│   ├── feature_engineering.py  # Behavioral & Velocity Feature Calculation Engine
+│   ├── anomaly_detection.py    # IsolationForest ML Anomaly Detection Tool
+│   ├── risk_classification.py  # Multi-Signal Risk Scoring & Action Recommendation
+│   ├── explanation.py          # Dynamic Evidence-Backed Explanation Generator
+│   └── graph_viz.py            # Directed Money Flow Network Topology Visualizer
+├── tests/
+│   └── test_agent_eval.py      # Trace-Level Evaluation & Determinism Test Suite
+└── charts/                     # Generated Visual Artifacts (Network Graphs & Risk Charts)
+```
+
+---
+
 
 ## Dynamic Planning & Query Behaviors
 
@@ -248,5 +289,4 @@ Dataset located at `data/synthetic_transactions.csv` (~5,000 rows):
 
 In compliance with hackathon regulations:
 - **Antigravity AI Agent** (Google DeepMind pair programmer) was used for initial architectural planning, refactoring, and test suite verification.
-- **Groq API (`llama-3.3-70b-versatile`)** powers the cloud dynamic planner and explanation generator.
-- **Local AI Rule Engine** provides deterministic offline execution fallback when cloud APIs are unavailable.
+- **Groq API (`llama-3.3-70b-versatile`)** powers the dynamic LLM planner and explanation engine in the live application.
