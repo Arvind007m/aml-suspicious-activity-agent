@@ -33,7 +33,8 @@ Unlike traditional fixed sequential pipelines, this system is a **true autonomou
 ## System Architecture
 
 ```mermaid
-%%{init: {'theme': 'dark', 'flowchart': {'curve': 'ortho'}}}%%
+%%{init: {'theme': 'dark', 'flowchart': {'curve': 'linear'}}}%%
+
 graph TD
     UserQuery["Natural Language User Query"]
     
